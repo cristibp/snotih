@@ -1,0 +1,31 @@
+{
+  "name": "curs-valutar-mobile",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~3.2.3",
+    "expo": "~51.0.0",
+    "expo-constants": "~16.0.0",
+    "expo-device": "~6.0.0",
+    "expo-notifications": "~0.28.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.74.0",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-svg": "15.2.0",
+    "react-native-web": "~0.19.10"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.0",
+    "typescript": "^5.5.4"
+  },
+  "private": true
+}

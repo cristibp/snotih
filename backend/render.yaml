@@ -1,0 +1,13 @@
+# Optional: configurare "Infrastructure as Code" pentru Render.
+# Daca preferi, poti conecta direct repo-ul in dashboard-ul Render
+# fara acest fisier - vezi instructiunile din README.md.
+services:
+  - type: web
+    name: curs-valutar-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: CRON_SECRET
+        sync: false
