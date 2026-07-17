@@ -8,3 +8,5 @@ web-build
 *.key
 *.mobileprovision
 .env
+android
+ios

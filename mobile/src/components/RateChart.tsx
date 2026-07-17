@@ -6,8 +6,8 @@ import { HistoryEntry } from '../api/types';
 
 interface RateChartProps {
   title: string;
-  history: HistoryEntry[];
-  dataKey: 'eurRonBnr' | 'eurUsdYahoo';
+  history: (HistoryEntry & { ronToUsd100?: number })[];
+  dataKey: 'eurRonBnr' | 'eurUsdYahoo' | 'ronToUsd100';
   color: string;
   activeIndex: number | null;
   setActiveIndex: (index: number | null) => void;
@@ -32,7 +32,7 @@ export default function RateChart({
   // etichete pe axa X (altfel devin ilizibile cand istoricul creste).
   const step = Math.max(1, Math.ceil(history.length / MAX_X_LABELS));
   const labels = history.map((entry, idx) => (idx % step === 0 ? entry.date.slice(5) : ''));
-  const values = history.map((entry) => entry[dataKey]);
+  const values = history.map((entry) => entry[dataKey] ?? 0);
 
   return (
     <View style={styles.container}>
@@ -118,7 +118,7 @@ export default function RateChart({
                   fontWeight="bold"
                   textAnchor="middle"
                 >
-                  {history[index][dataKey].toFixed(4)}
+                  {((history[index] ? history[index][dataKey] : 0) ?? 0).toFixed(4)}
                 </TextSVG>
               </G>
             );

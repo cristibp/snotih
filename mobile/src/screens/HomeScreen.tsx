@@ -80,6 +80,10 @@ export default function HomeScreen() {
 
   const filteredHistory = filterHistory(history, selectedInterval);
   const chartHistory = downsampleData(filteredHistory, 80);
+  const chartHistoryWithConversion = chartHistory.map((entry) => ({
+    ...entry,
+    ronToUsd100: entry.eurRonBnr > 0 ? (100 * entry.eurUsdYahoo) / entry.eurRonBnr : 0,
+  }));
 
   return (
     <ScrollView
@@ -105,10 +109,16 @@ export default function HomeScreen() {
             <Text style={styles.label}>EUR/USD</Text>
             <Text style={styles.value}>{rates.eurUsdYahoo.toFixed(4)}</Text>
           </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>100 RON în USD</Text>
+            <Text style={[styles.value, { color: '#8B5CF6' }]}>
+              {rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr).toFixed(2) : '0.00'} $
+            </Text>
+          </View>
         </View>
       )}
 
-      <MonthlyStatsList stats={monthlyStats} />
 
       <Text style={styles.sectionTitle}>Evoluție Grafice</Text>
       <DropdownSelector
@@ -122,7 +132,7 @@ export default function HomeScreen() {
 
       <RateChart
         title="Evolutie EUR/RON (BNR)"
-        history={chartHistory}
+        history={chartHistoryWithConversion}
         dataKey="eurRonBnr"
         color="#2E7D32"
         activeIndex={activeIndex}
@@ -131,14 +141,23 @@ export default function HomeScreen() {
 
       <RateChart
         title="Evolutie EUR/USD"
-        history={chartHistory}
+        history={chartHistoryWithConversion}
         dataKey="eurUsdYahoo"
         color="#1D4ED8"
         activeIndex={activeIndex}
         setActiveIndex={setActiveIndex}
       />
 
-      <Text style={styles.hint}>Trage in jos pentru actualizare manuala</Text>
+      <RateChart
+        title="Evolutie Valoare 100 RON in USD"
+        history={chartHistoryWithConversion}
+        dataKey="ronToUsd100"
+        color="#8B5CF6"
+        activeIndex={activeIndex}
+        setActiveIndex={setActiveIndex}
+      />
+
+      <MonthlyStatsList stats={monthlyStats} />
     </ScrollView>
   );
 }
