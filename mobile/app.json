@@ -5,14 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.example.cursvalutar"
+      "bundleIdentifier": "com.cral.cursvalutar"
     },
     "android": {
-      "package": "com.example.cursvalutar",
-      "permissions": ["NOTIFICATIONS"]
+      "package": "com.cral.cursvalutar",
+      "permissions": [
+        "NOTIFICATIONS"
+      ]
     },
     "plugins": [
       [
@@ -25,7 +29,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "INLOCUIESTE-CU-PROJECT-ID-UL-TAU-DIN-EXPO"
+        "projectId": "67877ab6-638a-4f10-b4cf-0ea0fc4f301c"
       }
     }
   }

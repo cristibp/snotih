@@ -16,7 +16,7 @@ import {
   writeMonthlyStats,
 } from './services/rateStore';
 import { sendPushToAll } from './services/pushService';
-import { backfillCurrentMonthIfNeeded } from './services/backfillService';
+import { backfillCurrentMonthIfNeeded, backfill10YearsIfNeeded } from './services/backfillService';
 import { ExchangeRates } from './types';
 
 dotenv.config();
@@ -105,6 +105,34 @@ app.get('/api/backfill-month', async (req, res) => {
 });
 
 /**
+ * GET /api/backfill-10-years
+ * Trigger manual (protejat de acelasi secret) care extrage toate datele lipsa
+ * pentru ultimii 10 ani.
+ */
+app.get('/api/backfill-10-years', async (req, res) => {
+  try {
+    const secretFromQuery = req.query.secret;
+    const secretFromHeader = req.headers['x-cron-secret'];
+    const providedSecret = secretFromQuery ?? secretFromHeader;
+
+    if (CRON_SECRET && providedSecret !== CRON_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized: secret invalid sau lipsa.' });
+    }
+
+    // Rulam asincron ca sa nu blocheze request-ul de HTTP (poate dura mai mult de 30 secunde)
+    backfill10YearsIfNeeded()
+      .then(() => console.log('Backfill 10 ani manual rulat cu succes.'))
+      .catch((err) => console.error('Eroare in backfill-ul de 10 ani manual:', err));
+
+    return res.json({ success: true, message: 'Procesul de backfill de 10 ani a fost pornit in fundal.' });
+  } catch (err) {
+    console.error('Eroare in /api/backfill-10-years:', err);
+    return res.status(500).json({ error: 'Eroare la pornirea backfill-ului.' });
+  }
+});
+
+
+/**
  * GET /api/fetch-rates
  * Endpoint apelat de un serviciu extern de cron (ex: Cron-Job.org).
  * Protejat printr-un secret trimis ca query param (?secret=...) sau header (x-cron-secret).
@@ -166,9 +194,10 @@ app.get('/api/fetch-rates', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serverul ruleaza pe portul ${PORT}`);
 
-  backfillCurrentMonthIfNeeded()
+  backfill10YearsIfNeeded()
+    .then(() => backfillCurrentMonthIfNeeded())
     .then((result) => {
-      if (result.backfilled) {
+      if (result && result.backfilled) {
         console.log(`Backfill automat la pornire: ${result.addedDays} zile adaugate pentru ${result.month}`);
       }
     })

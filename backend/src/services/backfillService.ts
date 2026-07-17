@@ -71,3 +71,68 @@ export async function backfillCurrentMonthIfNeeded(): Promise<BackfillResult> {
 
   return { backfilled: true, addedDays: entries.length, month: monthPrefix };
 }
+
+/**
+ * Backfill pentru ultimii 10 ani de date. Parcurge anii incepand cu 10 ani in urma
+ * pana la anul curent si aduce cursurile pentru fiecare an daca nu avem deja date
+ * din anul de start.
+ */
+export async function backfill10YearsIfNeeded(): Promise<void> {
+  const history = readHistory();
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 10;
+
+  // Verificam daca avem deja cel putin o intrare din anul de start
+  const hasOldData = history.some((entry) => entry.date.startsWith(`${startYear}-`));
+  if (hasOldData) {
+    console.log(`[Backfill] Istoricul contine deja date din ${startYear}. Nu este necesar backfill-ul de 10 ani.`);
+    return;
+  }
+
+  console.log(`[Backfill] Pornire descarcare istoric 10 ani (${startYear} - ${currentYear})...`);
+
+  const allEntries: HistoryEntry[] = [];
+
+  for (let year = startYear; year <= currentYear; year++) {
+    try {
+      console.log(`[Backfill] Descarcare date pentru anul ${year}...`);
+      const bnrRates = await fetchBnrHistoricalYear(year);
+
+      const startDate = `${year}-01-01`;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const endDate = year === currentYear ? todayStr : `${year}-12-31`;
+
+      const usdRates = await fetchEurUsdRange(startDate, endDate).catch((err) => {
+        console.error(`[Backfill] Fetch EUR/USD range failed for ${startDate}..${endDate}:`, err);
+        return [];
+      });
+
+      const usdByDate = new Map(usdRates.map((r) => [r.date, r.eurUsdYahoo]));
+      const now = new Date().toISOString();
+
+      const yearEntries: HistoryEntry[] = bnrRates
+        .filter((r) => usdByDate.has(r.date))
+        .map((r) => ({
+          date: r.date,
+          eurRonBnr: r.eurRonBnr,
+          eurUsdYahoo: usdByDate.get(r.date) as number,
+          fetchedAt: now,
+        }));
+
+      allEntries.push(...yearEntries);
+      console.log(`[Backfill] S-au gasit ${yearEntries.length} intrari pentru anul ${year}.`);
+    } catch (err) {
+      console.error(`[Backfill] Eroare la descarcarea datelor pentru anul ${year}:`, err);
+    }
+  }
+
+  if (allEntries.length > 0) {
+    const merged = mergeHistoryEntries(allEntries);
+    const stats = computeMonthlyStats(merged);
+    writeMonthlyStats(stats);
+    console.log(`[Backfill] Finalizat! S-au salvat ${allEntries.length} intrari noi.`);
+  } else {
+    console.log(`[Backfill] Nu s-au gasit intrari noi de salvat.`);
+  }
+}
+
