@@ -17,6 +17,8 @@ export default function HomeScreen() {
   const { history, monthlyStats, refresh: refreshHistory } = useHistory();
   const [refreshing, setRefreshing] = useState(false);
 
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refresh(), refreshHistory()]);
@@ -57,6 +59,8 @@ export default function HomeScreen() {
         history={history}
         dataKey="eurRonBnr"
         color="#2E7D32"
+        activeIndex={activeIndex}
+        setActiveIndex={setActiveIndex}
       />
 
       <RateChart
@@ -64,6 +68,8 @@ export default function HomeScreen() {
         history={history}
         dataKey="eurUsdYahoo"
         color="#1D4ED8"
+        activeIndex={activeIndex}
+        setActiveIndex={setActiveIndex}
       />
 
       <Text style={styles.hint}>Trage in jos pentru actualizare manuala</Text>

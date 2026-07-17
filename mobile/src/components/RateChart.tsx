@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
+import { G, Circle, Rect, Text as TextSVG, Line } from 'react-native-svg';
 import { HistoryEntry } from '../api/types';
 
 interface RateChartProps {
@@ -8,12 +9,21 @@ interface RateChartProps {
   history: HistoryEntry[];
   dataKey: 'eurRonBnr' | 'eurUsdYahoo';
   color: string;
+  activeIndex: number | null;
+  setActiveIndex: (index: number | null) => void;
 }
 
 const screenWidth = Dimensions.get('window').width;
 const MAX_X_LABELS = 6;
 
-export default function RateChart({ title, history, dataKey, color }: RateChartProps) {
+export default function RateChart({
+  title,
+  history,
+  dataKey,
+  color,
+  activeIndex,
+  setActiveIndex,
+}: RateChartProps) {
   if (history.length === 0) {
     return null;
   }
@@ -36,6 +46,117 @@ export default function RateChart({ title, history, dataKey, color }: RateChartP
         height={220}
         yAxisLabel=""
         yAxisSuffix=""
+        renderDotContent={({ x, y, index }) => {
+          const isActive = index === activeIndex;
+
+          let tooltipComponent = null;
+          if (isActive) {
+            const chartWidth = screenWidth - 40;
+            const boxWidth = 110;
+            const boxHeight = 45;
+
+            // Calculate X position to stay within the chart boundary
+            let boxX = x - boxWidth / 2;
+            if (boxX < 10) {
+              boxX = 10;
+            } else if (boxX + boxWidth > chartWidth - 10) {
+              boxX = chartWidth - 10 - boxWidth;
+            }
+
+            // Calculate Y position (show below the point if it's too high, otherwise show above)
+            let boxY = y - boxHeight - 10;
+            if (boxY < 10) {
+              boxY = y + 15;
+            }
+
+            tooltipComponent = (
+              <G key={`tooltip-${index}`}>
+                {/* Vertical line indicator */}
+                <Line
+                  x1={x}
+                  y1={10}
+                  x2={x}
+                  y2={180}
+                  stroke="#D1D5DB"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+                {/* Highlighted active dot */}
+                <Circle
+                  cx={x}
+                  cy={y}
+                  r={6}
+                  fill={color}
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
+                />
+                {/* Tooltip Card */}
+                <Rect
+                  x={boxX}
+                  y={boxY}
+                  width={boxWidth}
+                  height={boxHeight}
+                  rx={8}
+                  fill="#1F2937"
+                  opacity={0.95}
+                />
+                <TextSVG
+                  x={boxX + boxWidth / 2}
+                  y={boxY + 16}
+                  fill="#9CA3AF"
+                  fontSize={10}
+                  fontWeight="500"
+                  textAnchor="middle"
+                >
+                  {history[index].date}
+                </TextSVG>
+                <TextSVG
+                  x={boxX + boxWidth / 2}
+                  y={boxY + 34}
+                  fill="#FFFFFF"
+                  fontSize={11}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                >
+                  {history[index][dataKey].toFixed(4)}
+                </TextSVG>
+              </G>
+            );
+          }
+
+          return (
+            <G key={`dot-group-${index}`}>
+              {/* Custom standard dot */}
+              <Circle
+                cx={x}
+                cy={y}
+                r={4}
+                fill="#FFFFFF"
+                stroke={color}
+                strokeWidth={1.5}
+              />
+              {/* Hover/Touch target overlay */}
+              <Circle
+                cx={x}
+                cy={y}
+                r={15}
+                fill="transparent"
+                // @ts-ignore
+                onMouseEnter={() => {
+                  setActiveIndex(index);
+                }}
+                // @ts-ignore
+                onMouseLeave={() => {
+                  setActiveIndex(null);
+                }}
+                onTouchStart={() => {
+                  setActiveIndex(index);
+                }}
+              />
+              {tooltipComponent}
+            </G>
+          );
+        }}
         chartConfig={{
           backgroundColor: '#FFFFFF',
           backgroundGradientFrom: '#FFFFFF',
@@ -43,7 +164,7 @@ export default function RateChart({ title, history, dataKey, color }: RateChartP
           decimalPlaces: 4,
           color: () => color,
           labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
-          propsForDots: { r: '2' },
+          propsForDots: { r: '0' },
           propsForBackgroundLines: { stroke: '#F0F0F0' },
         }}
         bezier
