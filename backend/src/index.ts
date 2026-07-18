@@ -195,14 +195,13 @@ app.post('/api/trigger-webhook', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Datele au fost trimise cu succes pe webhook.',
-      webhookStatus: response.status,
-      payload,
+      message: 'OK',
+      webhookStatus: response.status
     });
   } catch (err: any) {
     console.error('Eroare in /api/trigger-webhook:', err.message || err);
     return res.status(500).json({
-      error: 'Trimiterea pe webhook a esuat.',
+      error: 'WEBHOOK-ERROR',
       details: err.message || String(err),
     });
   }
