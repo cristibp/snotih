@@ -209,10 +209,11 @@ export default function RateChart({
                 strokeWidth={1.5}
               />
               {/* Hover/Touch target overlay */}
-              <Circle
-                cx={x}
-                cy={y}
-                r={15}
+              <Rect
+                x={x - 20}
+                y={0}
+                width={40}
+                height={220}
                 fill="transparent"
                 // @ts-ignore
                 onMouseEnter={() => {
