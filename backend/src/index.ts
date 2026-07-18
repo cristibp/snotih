@@ -154,6 +154,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
     } else {
       textSummary += `Nu exista date disponibile pentru luna precedenta.`;
     }
+    textSummary += "(https://snotih.netlify.app/)"
 
     const payload = {
       content: textSummary,
@@ -261,6 +262,40 @@ app.get('/api/backfill-10-years', async (req, res) => {
 });
 
 
+export async function fetchAndSaveRates() {
+  const [eurRonBnr, eurUsdYahoo] = await Promise.all([
+    fetchBnrEurRon(),
+    fetchEurUsd(),
+  ]);
+
+  const newRates: ExchangeRates = {
+    date: new Date().toISOString().split('T')[0],
+    eurRonBnr,
+    eurUsdYahoo,
+    fetchedAt: new Date().toISOString(),
+  };
+
+  writeRates(newRates);
+
+  // Daca luna curenta nu are inca niciun istoric (ex: prima rulare dintr-o
+  // luna noua), completam automat zilele anterioare din arhiva BNR/Frankfurter.
+  await backfillCurrentMonthIfNeeded();
+
+  const history = appendHistory(newRates);
+  const monthlyStats = computeMonthlyStats(history);
+  writeMonthlyStats(monthlyStats);
+
+  //const tokens = readTokens();
+  //let notified = 0;
+
+  //if (tokens.length > 0) {
+  const message = `Curs nou disponibil! EUR/RON: ${eurRonBnr.toFixed(4)} | EUR/USD: ${eurUsdYahoo.toFixed(4)}`;
+  //await sendPushToAll(tokens, message);
+  //notified = tokens.length;
+  //}
+  return newRates;
+}
+
 /**
  * GET /api/fetch-rates
  * Endpoint apelat de un serviciu extern de cron (ex: Cron-Job.org).
@@ -282,36 +317,7 @@ app.get('/api/fetch-rates', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized: secret invalid sau lipsa.' });
     }
 
-    const [eurRonBnr, eurUsdYahoo] = await Promise.all([
-      fetchBnrEurRon(),
-      fetchEurUsd(),
-    ]);
-
-    const newRates: ExchangeRates = {
-      date: new Date().toISOString().split('T')[0],
-      eurRonBnr,
-      eurUsdYahoo,
-      fetchedAt: new Date().toISOString(),
-    };
-
-    writeRates(newRates);
-
-    // Daca luna curenta nu are inca niciun istoric (ex: prima rulare dintr-o
-    // luna noua), completam automat zilele anterioare din arhiva BNR/Frankfurter.
-    await backfillCurrentMonthIfNeeded();
-
-    const history = appendHistory(newRates);
-    const monthlyStats = computeMonthlyStats(history);
-    writeMonthlyStats(monthlyStats);
-
-    //const tokens = readTokens();
-    //let notified = 0;
-
-    //if (tokens.length > 0) {
-    const message = `Curs nou disponibil! EUR/RON: ${eurRonBnr.toFixed(4)} | EUR/USD: ${eurUsdYahoo.toFixed(4)}`;
-    //await sendPushToAll(tokens, message);
-    //notified = tokens.length;
-    //}
+    await fetchAndSaveRates();
 
     return res.json({ success: true });
   } catch (err) {
@@ -330,5 +336,12 @@ app.listen(PORT, () => {
         console.log(`Backfill automat la pornire: ${result.addedDays} zile adaugate pentru ${result.month}`);
       }
     })
-    .catch((err) => console.error('Backfill automat la pornire a esuat:', err));
+    .then(() => {
+      console.log('Executam fetch-rates automat la pornire...');
+      return fetchAndSaveRates();
+    })
+    .then((rates) => {
+      console.log(`Fetch-rates rulat cu succes la pornire. Curs curent: EUR/RON: ${rates.eurRonBnr.toFixed(4)} | EUR/USD: ${rates.eurUsdYahoo.toFixed(4)}`);
+    })
+    .catch((err) => console.error('Eroare la initializarea datelor sau fetch-rates la pornire:', err));
 });
