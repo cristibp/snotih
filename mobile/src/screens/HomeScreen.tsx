@@ -84,6 +84,75 @@ export default function HomeScreen() {
     ...entry,
     ronToUsd100: entry.eurRonBnr > 0 ? (100 * entry.eurUsdYahoo) / entry.eurRonBnr : 0,
   }));
+  const activeEntry = activeIndex !== null && chartHistoryWithConversion[activeIndex]
+    ? chartHistoryWithConversion[activeIndex]
+    : chartHistoryWithConversion.length > 0 
+      ? chartHistoryWithConversion[chartHistoryWithConversion.length - 1]
+      : null;
+
+  // Find index in the full history to get the true previous day
+  const fullIndex = activeEntry 
+    ? history.findIndex((h) => h.date === activeEntry.date) 
+    : -1;
+
+  const prevEntry = fullIndex > 0 ? history[fullIndex - 1] : null;
+
+  // Compute averages for the selected interval
+  const avgEurRon = filteredHistory.length > 0
+    ? filteredHistory.reduce((sum, h) => sum + h.eurRonBnr, 0) / filteredHistory.length
+    : 0;
+
+  const avgEurUsd = filteredHistory.length > 0
+    ? filteredHistory.reduce((sum, h) => sum + h.eurUsdYahoo, 0) / filteredHistory.length
+    : 0;
+
+  const avgRonToUsd = filteredHistory.length > 0
+    ? filteredHistory.reduce((sum, h) => {
+        const conv = h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0;
+        return sum + conv;
+      }, 0) / filteredHistory.length
+    : 0;
+
+  const dispEurRon = activeEntry ? activeEntry.eurRonBnr : (rates ? rates.eurRonBnr : 0);
+  const dispEurUsd = activeEntry ? activeEntry.eurUsdYahoo : (rates ? rates.eurUsdYahoo : 0);
+  const dispRonToUsd = activeEntry 
+    ? (activeEntry.eurRonBnr > 0 ? (100 * activeEntry.eurUsdYahoo) / activeEntry.eurRonBnr : 0)
+    : (rates && rates.eurRonBnr > 0 ? (100 * rates.eurUsdYahoo) / rates.eurRonBnr : 0);
+
+  const prevEurRon = prevEntry ? prevEntry.eurRonBnr : null;
+  const prevEurUsd = prevEntry ? prevEntry.eurUsdYahoo : null;
+  const prevRonToUsd = prevEntry && prevEntry.eurRonBnr > 0 
+    ? (100 * prevEntry.eurUsdYahoo) / prevEntry.eurRonBnr 
+    : null;
+
+  const RateComparison = ({ currentVal, prevVal, avgVal }: { currentVal: number; prevVal: number | null; avgVal: number }) => {
+    let prevStr = 'Față de ieri: N/A';
+    let prevColor = '#6B7280';
+    if (prevVal !== null && prevVal > 0) {
+      const diff = ((currentVal - prevVal) / prevVal) * 100;
+      const sign = diff >= 0 ? '+' : '';
+      const word = diff >= 0 ? 'apreciat' : 'depreciat';
+      prevStr = `Față de ieri: ${sign}${diff.toFixed(2)}% (${word})`;
+      prevColor = diff >= 0 ? '#10B981' : '#EF4444';
+    }
+
+    let avgStr = 'Față de medie: N/A';
+    let avgColor = '#6B7280';
+    if (avgVal > 0) {
+      const diff = ((currentVal - avgVal) / avgVal) * 100;
+      const sign = diff >= 0 ? '+' : '';
+      const word = diff >= 0 ? 'apreciat' : 'depreciat';
+      avgStr = `Față de medie: ${sign}${diff.toFixed(2)}% (${word})`;
+      avgColor = diff >= 0 ? '#10B981' : '#EF4444';
+    }
+
+    return (
+      <View style={styles.comparisonRow}>
+        <Text style={[styles.comparisonText, { color: prevColor }]}>{prevStr}</Text>
+        <Text style={[styles.comparisonText, { color: avgColor }]}>{avgStr}</Text>
+      </View>
+    );
+  };
 
   return (
     <ScrollView
@@ -96,25 +165,37 @@ export default function HomeScreen() {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {rates && (
+      {(activeEntry || rates) && (
         <View style={styles.card}>
-          <Text style={styles.date}>Data: {rates.date}</Text>
+          <Text style={styles.date}>
+            Data: {activeEntry ? activeEntry.date : rates?.date} 
+            {activeIndex !== null ? ' (Selectat din grafic)' : ' (Cel mai recent)'}
+          </Text>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>EUR/RON (BNR)</Text>
-            <Text style={styles.value}>{rates.eurRonBnr.toFixed(4)}</Text>
+          <View style={styles.rateBlock}>
+            <View style={styles.row}>
+              <Text style={styles.label}>EUR/RON (BNR)</Text>
+              <Text style={styles.value}>{dispEurRon.toFixed(4)}</Text>
+            </View>
+            <RateComparison currentVal={dispEurRon} prevVal={prevEurRon} avgVal={avgEurRon} />
           </View>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>EUR/USD</Text>
-            <Text style={styles.value}>{rates.eurUsdYahoo.toFixed(4)}</Text>
+          <View style={styles.rateBlock}>
+            <View style={styles.row}>
+              <Text style={styles.label}>EUR/USD</Text>
+              <Text style={styles.value}>{dispEurUsd.toFixed(4)}</Text>
+            </View>
+            <RateComparison currentVal={dispEurUsd} prevVal={prevEurUsd} avgVal={avgEurUsd} />
           </View>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>100 RON în USD</Text>
-            <Text style={[styles.value, { color: '#8B5CF6' }]}>
-              {rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr).toFixed(2) : '0.00'} $
-            </Text>
+          <View style={styles.rateBlock}>
+            <View style={styles.row}>
+              <Text style={styles.label}>100 RON în USD</Text>
+              <Text style={[styles.value, { color: '#8B5CF6' }]}>
+                {dispRonToUsd.toFixed(2)} $
+              </Text>
+            </View>
+            <RateComparison currentVal={dispRonToUsd} prevVal={prevRonToUsd} avgVal={avgRonToUsd} />
           </View>
         </View>
       )}
@@ -226,5 +307,21 @@ const styles = StyleSheet.create({
     marginTop: 20,
     color: '#9CA3AF',
     fontSize: 12,
+  },
+  rateBlock: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingBottom: 8,
+  },
+  comparisonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  comparisonText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

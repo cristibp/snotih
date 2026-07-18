@@ -81,8 +81,8 @@ export default function RateChart({
           let tooltipComponent = null;
           if (isActive) {
             const chartWidth = screenWidth - 40;
-            const boxWidth = 110;
-            const boxHeight = 45;
+            const boxWidth = 140;
+            const boxHeight = 70;
 
             // Calculate X position to stay within the chart boundary
             let boxX = x - boxWidth / 2;
@@ -96,6 +96,30 @@ export default function RateChart({
             let boxY = y - boxHeight - 10;
             if (boxY < 10) {
               boxY = y + 15;
+            }
+
+            const currentVal = values[index] ?? 0;
+            const prevVal = index > 0 ? (values[index - 1] ?? 0) : null;
+            const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+
+            let changePrevStr = 'Ieri: N/A';
+            let changePrevColor = '#9CA3AF';
+            if (prevVal !== null && prevVal > 0) {
+              const diff = ((currentVal - prevVal) / prevVal) * 100;
+              const sign = diff >= 0 ? '+' : '';
+              const word = diff >= 0 ? 'aprec.' : 'deprec.';
+              changePrevStr = `Ieri: ${sign}${diff.toFixed(2)}% (${word})`;
+              changePrevColor = diff >= 0 ? '#10B981' : '#EF4444';
+            }
+
+            let changeAvgStr = 'Medie: N/A';
+            let changeAvgColor = '#9CA3AF';
+            if (average > 0) {
+              const diff = ((currentVal - average) / average) * 100;
+              const sign = diff >= 0 ? '+' : '';
+              const word = diff >= 0 ? 'aprec.' : 'deprec.';
+              changeAvgStr = `Medie: ${sign}${diff.toFixed(2)}% (${word})`;
+              changeAvgColor = diff >= 0 ? '#10B981' : '#EF4444';
             }
 
             tooltipComponent = (
@@ -131,7 +155,7 @@ export default function RateChart({
                 />
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 16}
+                  y={boxY + 14}
                   fill="#9CA3AF"
                   fontSize={10}
                   fontWeight="500"
@@ -141,13 +165,33 @@ export default function RateChart({
                 </TextSVG>
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 34}
+                  y={boxY + 28}
                   fill="#FFFFFF"
                   fontSize={11}
                   fontWeight="bold"
                   textAnchor="middle"
                 >
-                  {((history[index] ? history[index][dataKey] : 0) ?? 0).toFixed(4)}
+                  {currentVal.toFixed(4)}
+                </TextSVG>
+                <TextSVG
+                  x={boxX + boxWidth / 2}
+                  y={boxY + 44}
+                  fill={changePrevColor}
+                  fontSize={9}
+                  fontWeight="600"
+                  textAnchor="middle"
+                >
+                  {changePrevStr}
+                </TextSVG>
+                <TextSVG
+                  x={boxX + boxWidth / 2}
+                  y={boxY + 58}
+                  fill={changeAvgColor}
+                  fontSize={9}
+                  fontWeight="600"
+                  textAnchor="middle"
+                >
+                  {changeAvgStr}
                 </TextSVG>
               </G>
             );
