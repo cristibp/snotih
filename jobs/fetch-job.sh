@@ -1,0 +1,1 @@
+curl -v -X GET "https://snoti.onrender.com/api/fetch-rates?secret=snotiCron123"

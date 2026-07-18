@@ -303,19 +303,19 @@ app.get('/api/fetch-rates', async (req, res) => {
     const monthlyStats = computeMonthlyStats(history);
     writeMonthlyStats(monthlyStats);
 
-    const tokens = readTokens();
-    let notified = 0;
+    //const tokens = readTokens();
+    //let notified = 0;
 
-    if (tokens.length > 0) {
-      const message = `Curs nou disponibil! EUR/RON: ${eurRonBnr.toFixed(4)} | EUR/USD: ${eurUsdYahoo.toFixed(4)}`;
-      await sendPushToAll(tokens, message);
-      notified = tokens.length;
-    }
+    //if (tokens.length > 0) {
+    const message = `Curs nou disponibil! EUR/RON: ${eurRonBnr.toFixed(4)} | EUR/USD: ${eurUsdYahoo.toFixed(4)}`;
+    //await sendPushToAll(tokens, message);
+    //notified = tokens.length;
+    //}
 
-    return res.json({ success: true, rates: newRates, notified });
+    return res.json({ success: true });
   } catch (err) {
     console.error('Eroare in /api/fetch-rates:', err);
-    return res.status(500).json({ error: 'Actualizarea cursului a esuat. Vezi log-urile pentru detalii.' });
+    return res.status(500).json({ error: 'Actualizarea cursului a esuat' });
   }
 });
 
