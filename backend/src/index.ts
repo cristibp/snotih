@@ -156,6 +156,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
     }
 
     const payload = {
+      content: textSummary,
       success: true,
       timestamp: new Date().toISOString(),
       currentRate: {
