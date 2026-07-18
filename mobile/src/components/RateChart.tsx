@@ -16,6 +16,35 @@ interface RateChartProps {
 const screenWidth = Dimensions.get('window').width;
 const MAX_X_LABELS = 6;
 
+function getYCoordinate(v: number, values: number[], height: number = 220, paddingTop: number = 16): number {
+  const validValues = values.filter((val) => typeof val === 'number' && isFinite(val));
+  if (validValues.length === 0) return 0;
+  
+  const max = Math.max(...validValues);
+  const min = Math.min(...validValues);
+  const scaler = max - min || 1;
+  
+  let baseHeight = height;
+  if (min >= 0 && max >= 0) {
+    baseHeight = height;
+  } else if (min < 0 && max <= 0) {
+    baseHeight = 0;
+  } else if (min < 0 && max > 0) {
+    baseHeight = (height * max) / scaler;
+  }
+  
+  let calcHeightVal = 0;
+  if (min < 0 && max > 0) {
+    calcHeightVal = height * (v / scaler);
+  } else if (min >= 0 && max >= 0) {
+    calcHeightVal = height * ((v - min) / scaler);
+  } else if (min < 0 && max <= 0) {
+    calcHeightVal = height * ((v - max) / scaler);
+  }
+  
+  return ((baseHeight - calcHeightVal) / 4) * 3 + paddingTop;
+}
+
 export default function RateChart({
   title,
   history,
@@ -166,6 +195,35 @@ export default function RateChart({
           labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
           propsForDots: { r: '0' },
           propsForBackgroundLines: { stroke: '#F0F0F0' },
+        }}
+        decorator={() => {
+          const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+          const y = getYCoordinate(average, values, 220, 16);
+          const xStart = 64; // default paddingRight
+          const xEnd = screenWidth - 40;
+          return (
+            <G key="average-line-group">
+              <Line
+                x1={xStart}
+                y1={y}
+                x2={xEnd}
+                y2={y}
+                stroke={color}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                opacity={0.8}
+              />
+              <TextSVG
+                x={xStart + 10}
+                y={y - 6}
+                fill={color}
+                fontSize={10}
+                fontWeight="bold"
+              >
+                Avg: {average.toFixed(4)}
+              </TextSVG>
+            </G>
+          );
         }}
         bezier
         style={styles.chart}
