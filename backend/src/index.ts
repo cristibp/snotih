@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import axios from 'axios';
 
 import { fetchBnrEurRon } from './services/bnrService';
 import { fetchEurUsd } from './services/exchangeService';
@@ -79,6 +80,93 @@ app.get('/api/history', (_req, res) => {
 app.get('/api/stats', (_req, res) => {
   res.json(readMonthlyStats());
 });
+
+/**
+ * POST /api/trigger-webhook
+ * Body: { webhookUrl: string }
+ * Trimite detaliile despre cursul curent si cel din luna precedenta pe un webhook.
+ */
+app.post('/api/trigger-webhook', async (req, res) => {
+  const { webhookUrl } = req.body ?? {};
+
+  if (!webhookUrl || typeof webhookUrl !== 'string') {
+    return res.status(400).json({ error: 'Campul "webhookUrl" (string) este obligatoriu.' });
+  }
+
+  try {
+    const rates = readRates();
+    if (!rates) {
+      return res.status(404).json({ error: 'Nu exista date despre curs curent.' });
+    }
+
+    const monthlyStats = readMonthlyStats();
+    const now = new Date();
+    let prevYear = now.getFullYear();
+    let prevMonthVal = now.getMonth(); // getMonth() returns 0-11. (e.g. if July -> 6, which is June 1-indexed)
+    if (prevMonthVal === 0) {
+      prevMonthVal = 12;
+      prevYear -= 1;
+    }
+    const prevMonthStr = `${prevYear}-${String(prevMonthVal).padStart(2, '0')}`;
+    const prevMonthStats = monthlyStats.find((s) => s.month === prevMonthStr);
+
+    const MONTH_NAMES = [
+      'Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie',
+      'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie',
+    ];
+    const formattedMonth = `${MONTH_NAMES[prevMonthVal - 1] ?? prevMonthVal} ${prevYear}`;
+
+    const ronToUsd100 = rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr) : 0;
+
+    let textSummary = `Curs Curent (${rates.date}):\n`;
+    textSummary += `EUR/RON (BNR): ${rates.eurRonBnr.toFixed(4)}\n`;
+    textSummary += `EUR/USD: ${rates.eurUsdYahoo.toFixed(4)}\n`;
+    textSummary += `100 RON în USD: ${ronToUsd100.toFixed(2)} $\n\n`;
+
+    textSummary += `Minim / Maxim pe luna precedenta (${formattedMonth}):\n`;
+    if (prevMonthStats) {
+      textSummary += `EUR/RON - Min: ${prevMonthStats.eurRonBnr.min.value.toFixed(4)} (${prevMonthStats.eurRonBnr.min.date}) | Max: ${prevMonthStats.eurRonBnr.max.value.toFixed(4)} (${prevMonthStats.eurRonBnr.max.date})\n`;
+      textSummary += `EUR/USD - Min: ${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)} (${prevMonthStats.eurUsdYahoo.min.date}) | Max: ${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)} (${prevMonthStats.eurUsdYahoo.max.date})`;
+    } else {
+      textSummary += `Nu exista date disponibile pentru luna precedenta.`;
+    }
+
+    const payload = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      currentRate: {
+        date: rates.date,
+        eurRonBnr: rates.eurRonBnr,
+        eurUsdYahoo: rates.eurUsdYahoo,
+        ronToUsd100: parseFloat(ronToUsd100.toFixed(2)),
+        fetchedAt: rates.fetchedAt,
+      },
+      previousMonth: prevMonthStats ? {
+        month: prevMonthStats.month,
+        formattedMonth,
+        eurRonBnr: prevMonthStats.eurRonBnr,
+        eurUsdYahoo: prevMonthStats.eurUsdYahoo,
+      } : null,
+      textSummary,
+    };
+
+    const response = await axios.post(webhookUrl, payload, { timeout: 10000 });
+
+    return res.json({
+      success: true,
+      message: 'Datele au fost trimise cu succes pe webhook.',
+      webhookStatus: response.status,
+      payload,
+    });
+  } catch (err: any) {
+    console.error('Eroare in /api/trigger-webhook:', err.message || err);
+    return res.status(500).json({
+      error: 'Trimiterea pe webhook a esuat.',
+      details: err.message || String(err),
+    });
+  }
+});
+
 
 /**
  * GET /api/backfill-month
