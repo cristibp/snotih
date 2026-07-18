@@ -118,10 +118,34 @@ app.post('/api/trigger-webhook', async (req, res) => {
 
     const ronToUsd100 = rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr) : 0;
 
+    // Calculam mediile pe ultimele 30 de zile si abaterile
+    const history = readHistory();
+    const last30 = history.slice(-30);
+    const count = last30.length;
+
+    const sumEurRon = last30.reduce((sum, h) => sum + h.eurRonBnr, 0);
+    const sumEurUsd = last30.reduce((sum, h) => sum + h.eurUsdYahoo, 0);
+    const sumRonToUsd = last30.reduce((sum, h) => {
+      const conv = h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0;
+      return sum + conv;
+    }, 0);
+
+    const avgEurRon = count > 0 ? sumEurRon / count : 0;
+    const avgEurUsd = count > 0 ? sumEurUsd / count : 0;
+    const avgRonToUsd = count > 0 ? sumRonToUsd / count : 0;
+
+    const devEurRon = avgEurRon > 0 ? ((rates.eurRonBnr - avgEurRon) / avgEurRon) * 100 : 0;
+    const devEurUsd = avgEurUsd > 0 ? ((rates.eurUsdYahoo - avgEurUsd) / avgEurUsd) * 100 : 0;
+    const devRonToUsd = avgRonToUsd > 0 ? ((ronToUsd100 - avgRonToUsd) / avgRonToUsd) * 100 : 0;
+
+    const formattedDevEurRon = (devEurRon >= 0 ? '+' : '') + devEurRon.toFixed(2) + '%';
+    const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
+    const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
+
     let textSummary = `Curs Curent (${rates.date}):\n`;
-    textSummary += `EUR/RON (BNR): ${rates.eurRonBnr.toFixed(4)}\n`;
-    textSummary += `EUR/USD: ${rates.eurUsdYahoo.toFixed(4)}\n`;
-    textSummary += `100 RON în USD: ${ronToUsd100.toFixed(2)} $\n\n`;
+    textSummary += `EUR/RON (BNR): ${rates.eurRonBnr.toFixed(4)} (Abatere: ${formattedDevEurRon} față de media pe 30 de zile de ${avgEurRon.toFixed(4)})\n`;
+    textSummary += `EUR/USD: ${rates.eurUsdYahoo.toFixed(4)} (Abatere: ${formattedDevEurUsd} față de media pe 30 de zile de ${avgEurUsd.toFixed(4)})\n`;
+    textSummary += `100 RON în USD: ${ronToUsd100.toFixed(2)} $ (Abatere: ${formattedDevRonToUsd} față de media pe 30 de zile de ${avgRonToUsd.toFixed(2)} $)\n\n`;
 
     textSummary += `Minim / Maxim pe luna precedenta (${formattedMonth}):\n`;
     if (prevMonthStats) {
@@ -140,6 +164,23 @@ app.post('/api/trigger-webhook', async (req, res) => {
         eurUsdYahoo: rates.eurUsdYahoo,
         ronToUsd100: parseFloat(ronToUsd100.toFixed(2)),
         fetchedAt: rates.fetchedAt,
+      },
+      averagesLast30Days: {
+        eurRonBnr: {
+          average: parseFloat(avgEurRon.toFixed(4)),
+          deviationPercent: parseFloat(devEurRon.toFixed(4)),
+          formattedDeviation: formattedDevEurRon,
+        },
+        eurUsdYahoo: {
+          average: parseFloat(avgEurUsd.toFixed(4)),
+          deviationPercent: parseFloat(devEurUsd.toFixed(4)),
+          formattedDeviation: formattedDevEurUsd,
+        },
+        ronToUsd100: {
+          average: parseFloat(avgRonToUsd.toFixed(2)),
+          deviationPercent: parseFloat(devRonToUsd.toFixed(4)),
+          formattedDeviation: formattedDevRonToUsd,
+        },
       },
       previousMonth: prevMonthStats ? {
         month: prevMonthStats.month,
