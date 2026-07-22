@@ -53,6 +53,8 @@ export default function RateChart({
   activeIndex,
   setActiveIndex,
 }: RateChartProps) {
+  const activeCoordsRef = React.useRef<{ x: number; y: number } | null>(null);
+
   if (history.length === 0) {
     return null;
   }
@@ -76,11 +78,74 @@ export default function RateChart({
         yAxisLabel=""
         yAxisSuffix=""
         renderDotContent={({ x, y, index }) => {
-          const isActive = index === activeIndex;
+          if (index === activeIndex) {
+            activeCoordsRef.current = { x, y };
+          }
+
+          const chartWidth = screenWidth - 40;
+          const colWidth = values.length > 1 ? Math.max(8, chartWidth / values.length) : 40;
+
+          return (
+            <G key={`dot-group-${index}`}>
+              {/* Custom standard dot */}
+              <Circle
+                cx={x}
+                cy={y}
+                r={4}
+                fill="#FFFFFF"
+                stroke={color}
+                strokeWidth={1.5}
+                pointerEvents="none"
+              />
+              {/* Hover/Touch target overlay */}
+              <Rect
+                x={x - colWidth / 2}
+                y={0}
+                width={colWidth}
+                height={220}
+                fill="rgba(0,0,0,0)"
+                // @ts-ignore
+                pointerEvents="all"
+                // @ts-ignore
+                onMouseEnter={() => {
+                  setActiveIndex(index);
+                }}
+                // @ts-ignore
+                onMouseMove={() => {
+                  setActiveIndex(index);
+                }}
+                // @ts-ignore
+                onMouseLeave={() => {
+                  if (activeIndex === index) {
+                    setActiveIndex(null);
+                  }
+                }}
+                onTouchStart={() => {
+                  setActiveIndex(index);
+                }}
+              />
+            </G>
+          );
+        }}
+        chartConfig={{
+          backgroundColor: '#FFFFFF',
+          backgroundGradientFrom: '#FFFFFF',
+          backgroundGradientTo: '#FFFFFF',
+          decimalPlaces: 4,
+          color: () => color,
+          labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
+          propsForDots: { r: '0' },
+          propsForBackgroundLines: { stroke: '#F0F0F0' },
+        }}
+        decorator={() => {
+          const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+          const avgY = getYCoordinate(average, values, 220, 16);
+          const xStart = 64; // default paddingRight
+          const xEnd = screenWidth - 40;
 
           let tooltipComponent = null;
-          if (isActive) {
-            const chartWidth = screenWidth - 40;
+          if (activeIndex !== null && activeCoordsRef.current && activeIndex < history.length) {
+            const { x, y } = activeCoordsRef.current;
             const boxWidth = 175;
             const boxHeight = 92;
 
@@ -88,8 +153,8 @@ export default function RateChart({
             let boxX = x - boxWidth / 2;
             if (boxX < 10) {
               boxX = 10;
-            } else if (boxX + boxWidth > chartWidth - 10) {
-              boxX = chartWidth - 10 - boxWidth;
+            } else if (boxX + boxWidth > xEnd - 10) {
+              boxX = xEnd - 10 - boxWidth;
             }
 
             // Calculate Y position (show below the point if it's too high, otherwise show above)
@@ -98,9 +163,8 @@ export default function RateChart({
               boxY = y + 18;
             }
 
-            const currentVal = values[index] ?? 0;
-            const prevVal = index > 0 ? (values[index - 1] ?? 0) : null;
-            const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+            const currentVal = values[activeIndex] ?? 0;
+            const prevVal = activeIndex > 0 ? (values[activeIndex - 1] ?? 0) : null;
 
             let changePrevStr = 'Ieri: N/A';
             let changePrevColor = '#9CA3AF';
@@ -123,7 +187,7 @@ export default function RateChart({
             }
 
             tooltipComponent = (
-              <G key={`tooltip-${index}`} pointerEvents="none">
+              <G key={`tooltip-${activeIndex}`} pointerEvents="none">
                 {/* Vertical line indicator */}
                 <Line
                   x1={x}
@@ -164,7 +228,7 @@ export default function RateChart({
                   fontWeight="600"
                   textAnchor="middle"
                 >
-                  {history[index].date}
+                  {history[activeIndex].date}
                 </TextSVG>
                 {/* Value */}
                 <TextSVG
@@ -212,88 +276,33 @@ export default function RateChart({
             );
           }
 
-          const chartWidth = screenWidth - 40;
-          const colWidth = values.length > 1 ? Math.max(8, chartWidth / values.length) : 40;
+          return (
+            <G key="decorator-group">
+              {/* Average Line rendered first */}
+              <G key="average-line-group">
+                <Line
+                  x1={xStart}
+                  y1={avgY}
+                  x2={xEnd}
+                  y2={avgY}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  opacity={0.8}
+                />
+                <TextSVG
+                  x={xStart + 10}
+                  y={avgY - 6}
+                  fill={color}
+                  fontSize={10}
+                  fontWeight="bold"
+                >
+                  Avg: {average.toFixed(4)}
+                </TextSVG>
+              </G>
 
-          return (
-            <G key={`dot-group-${index}`}>
-              {/* Custom standard dot */}
-              <Circle
-                cx={x}
-                cy={y}
-                r={4}
-                fill="#FFFFFF"
-                stroke={color}
-                strokeWidth={1.5}
-                pointerEvents="none"
-              />
-              {/* Hover/Touch target overlay */}
-              <Rect
-                x={x - colWidth / 2}
-                y={0}
-                width={colWidth}
-                height={220}
-                fill="rgba(0,0,0,0)"
-                // @ts-ignore
-                pointerEvents="all"
-                // @ts-ignore
-                onMouseEnter={() => {
-                  setActiveIndex(index);
-                }}
-                // @ts-ignore
-                onMouseMove={() => {
-                  setActiveIndex(index);
-                }}
-                // @ts-ignore
-                onMouseLeave={() => {
-                  if (activeIndex === index) {
-                    setActiveIndex(null);
-                  }
-                }}
-                onTouchStart={() => {
-                  setActiveIndex(index);
-                }}
-              />
+              {/* Tooltip rendered second so it appears on top of the average line */}
               {tooltipComponent}
-            </G>
-          );
-        }}
-        chartConfig={{
-          backgroundColor: '#FFFFFF',
-          backgroundGradientFrom: '#FFFFFF',
-          backgroundGradientTo: '#FFFFFF',
-          decimalPlaces: 4,
-          color: () => color,
-          labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
-          propsForDots: { r: '0' },
-          propsForBackgroundLines: { stroke: '#F0F0F0' },
-        }}
-        decorator={() => {
-          const average = values.reduce((sum, val) => sum + val, 0) / values.length;
-          const y = getYCoordinate(average, values, 220, 16);
-          const xStart = 64; // default paddingRight
-          const xEnd = screenWidth - 40;
-          return (
-            <G key="average-line-group">
-              <Line
-                x1={xStart}
-                y1={y}
-                x2={xEnd}
-                y2={y}
-                stroke={color}
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                opacity={0.8}
-              />
-              <TextSVG
-                x={xStart + 10}
-                y={y - 6}
-                fill={color}
-                fontSize={10}
-                fontWeight="bold"
-              >
-                Avg: {average.toFixed(4)}
-              </TextSVG>
             </G>
           );
         }}
