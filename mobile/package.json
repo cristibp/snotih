@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "update-build-info": "node scripts/update-build-info.js",
+    "prestart": "npm run update-build-info",
+    "preandroid": "npm run update-build-info",
+    "preios": "npm run update-build-info",
+    "preweb": "npm run update-build-info",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",

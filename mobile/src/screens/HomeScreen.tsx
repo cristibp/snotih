@@ -13,6 +13,7 @@ import MonthlyStatsList from '../components/MonthlyStatsList';
 import RateChart from '../components/RateChart';
 import DropdownSelector, { DropdownOption } from '../components/DropdownSelector';
 import { HistoryEntry } from '../api/types';
+import buildInfo from '../constants/buildInfo.json';
 
 const INTERVAL_OPTIONS: DropdownOption[] = [
   { label: '1 Lună', value: '1m' },
@@ -239,6 +240,12 @@ export default function HomeScreen() {
       />
 
       <MonthlyStatsList stats={monthlyStats} />
+
+      <View style={styles.footerContainer}>
+        <Text style={styles.lastModifiedText}>
+          Ultima modificare cod: {buildInfo.lastModified}
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -323,5 +330,16 @@ const styles = StyleSheet.create({
   comparisonText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  footerContainer: {
+    width: '100%',
+    alignItems: 'flex-end',
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  lastModifiedText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
 });
