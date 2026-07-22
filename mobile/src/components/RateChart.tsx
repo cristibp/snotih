@@ -123,7 +123,7 @@ export default function RateChart({
             }
 
             tooltipComponent = (
-              <G key={`tooltip-${index}`}>
+              <G key={`tooltip-${index}`} pointerEvents="none">
                 {/* Vertical line indicator */}
                 <Line
                   x1={x}
@@ -197,6 +197,9 @@ export default function RateChart({
             );
           }
 
+          const chartWidth = screenWidth - 40;
+          const colWidth = values.length > 1 ? Math.max(8, chartWidth / values.length) : 40;
+
           return (
             <G key={`dot-group-${index}`}>
               {/* Custom standard dot */}
@@ -207,21 +210,30 @@ export default function RateChart({
                 fill="#FFFFFF"
                 stroke={color}
                 strokeWidth={1.5}
+                pointerEvents="none"
               />
               {/* Hover/Touch target overlay */}
               <Rect
-                x={x - 20}
+                x={x - colWidth / 2}
                 y={0}
-                width={40}
+                width={colWidth}
                 height={220}
-                fill="transparent"
+                fill="rgba(0,0,0,0)"
+                // @ts-ignore
+                pointerEvents="all"
                 // @ts-ignore
                 onMouseEnter={() => {
                   setActiveIndex(index);
                 }}
                 // @ts-ignore
+                onMouseMove={() => {
+                  setActiveIndex(index);
+                }}
+                // @ts-ignore
                 onMouseLeave={() => {
-                  setActiveIndex(null);
+                  if (activeIndex === index) {
+                    setActiveIndex(null);
+                  }
                 }}
                 onTouchStart={() => {
                   setActiveIndex(index);
