@@ -81,8 +81,8 @@ export default function RateChart({
           let tooltipComponent = null;
           if (isActive) {
             const chartWidth = screenWidth - 40;
-            const boxWidth = 140;
-            const boxHeight = 70;
+            const boxWidth = 175;
+            const boxHeight = 92;
 
             // Calculate X position to stay within the chart boundary
             let boxX = x - boxWidth / 2;
@@ -93,9 +93,9 @@ export default function RateChart({
             }
 
             // Calculate Y position (show below the point if it's too high, otherwise show above)
-            let boxY = y - boxHeight - 10;
+            let boxY = y - boxHeight - 12;
             if (boxY < 10) {
-              boxY = y + 15;
+              boxY = y + 18;
             }
 
             const currentVal = values[index] ?? 0;
@@ -130,65 +130,80 @@ export default function RateChart({
                   y1={10}
                   x2={x}
                   y2={180}
-                  stroke="#D1D5DB"
-                  strokeWidth={1}
+                  stroke="#94A3B8"
+                  strokeWidth={1.5}
                   strokeDasharray="4 4"
                 />
                 {/* Highlighted active dot */}
                 <Circle
                   cx={x}
                   cy={y}
-                  r={6}
+                  r={7}
                   fill={color}
                   stroke="#FFFFFF"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 />
-                {/* Tooltip Card */}
+                {/* Tooltip Card background with accent border */}
                 <Rect
                   x={boxX}
                   y={boxY}
                   width={boxWidth}
                   height={boxHeight}
-                  rx={8}
-                  fill="#1F2937"
-                  opacity={0.95}
+                  rx={10}
+                  fill="#0F172A"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  opacity={0.98}
                 />
+                {/* Date */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 14}
-                  fill="#9CA3AF"
-                  fontSize={10}
-                  fontWeight="500"
+                  y={boxY + 18}
+                  fill="#94A3B8"
+                  fontSize={11}
+                  fontWeight="600"
                   textAnchor="middle"
                 >
                   {history[index].date}
                 </TextSVG>
+                {/* Value */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 28}
+                  y={boxY + 38}
                   fill="#FFFFFF"
-                  fontSize={11}
+                  fontSize={16}
                   fontWeight="bold"
                   textAnchor="middle"
                 >
                   {currentVal.toFixed(4)}
                 </TextSVG>
+                {/* Separator line inside tooltip */}
+                <Line
+                  x1={boxX + 12}
+                  y1={boxY + 46}
+                  x2={boxX + boxWidth - 12}
+                  y2={boxY + 46}
+                  stroke="#334155"
+                  strokeWidth={1}
+                />
+                {/* Change vs Yesterday */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 44}
+                  y={boxY + 63}
                   fill={changePrevColor}
-                  fontSize={9}
-                  fontWeight="600"
+                  fontSize={11}
+                  fontWeight="bold"
                   textAnchor="middle"
                 >
                   {changePrevStr}
                 </TextSVG>
+                {/* Change vs Average */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 58}
+                  y={boxY + 80}
                   fill={changeAvgColor}
-                  fontSize={9}
-                  fontWeight="600"
+                  fontSize={11}
+                  fontWeight="bold"
                   textAnchor="middle"
                 >
                   {changeAvgStr}

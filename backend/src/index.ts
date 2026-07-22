@@ -142,22 +142,58 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
     const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
 
-    let textSummary = `Curs Curent (${rates.date}):\n`;
-    textSummary += `EUR/RON (BNR): ${rates.eurRonBnr.toFixed(4)} (Abatere: ${formattedDevEurRon} față de media pe 30 de zile de ${avgEurRon.toFixed(4)})\n`;
-    textSummary += `EUR/USD: ${rates.eurUsdYahoo.toFixed(4)} (Abatere: ${formattedDevEurUsd} față de media pe 30 de zile de ${avgEurUsd.toFixed(4)})\n`;
-    textSummary += `100 RON în USD: ${ronToUsd100.toFixed(2)} $ (Abatere: ${formattedDevRonToUsd} față de media pe 30 de zile de ${avgRonToUsd.toFixed(2)} $)\n\n`;
-
-    textSummary += `Minim / Maxim pe luna precedenta (${formattedMonth}):\n`;
+    let textSummary = `**📊 Raport Curs Valutar — ${rates.date}**\n\n`;
+    textSummary += `**💶 EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)}\` RON (${devEurRon >= 0 ? '🟢 +' : '🔴 '}${devEurRon.toFixed(2)}% vs medie: ${avgEurRon.toFixed(4)})\n`;
+    textSummary += `**💵 EUR / USD:** \`${rates.eurUsdYahoo.toFixed(4)}\` USD (${devEurUsd >= 0 ? '🟢 +' : '🔴 '}${devEurUsd.toFixed(2)}% vs medie: ${avgEurUsd.toFixed(4)})\n`;
+    textSummary += `**🇷🇴 100 RON în USD:** \`${ronToUsd100.toFixed(2)}\` $ (${devRonToUsd >= 0 ? '🟢 +' : '🔴 '}${devRonToUsd.toFixed(2)}% vs medie: ${avgRonToUsd.toFixed(2)} $)\n\n`;
+    textSummary += `**📅 Minim / Maxim (${formattedMonth}):**\n`;
     if (prevMonthStats) {
-      textSummary += `EUR/RON - Min: ${prevMonthStats.eurRonBnr.min.value.toFixed(4)} (${prevMonthStats.eurRonBnr.min.date}) | Max: ${prevMonthStats.eurRonBnr.max.value.toFixed(4)} (${prevMonthStats.eurRonBnr.max.date})\n`;
-      textSummary += `EUR/USD - Min: ${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)} (${prevMonthStats.eurUsdYahoo.min.date}) | Max: ${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)} (${prevMonthStats.eurUsdYahoo.max.date})`;
+      textSummary += `• **EUR/RON:** Min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ Max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n`;
+      textSummary += `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})\n`;
     } else {
-      textSummary += `Nu exista date disponibile pentru luna precedenta.`;
+      textSummary += `Nu există date disponibile pentru luna precedentă.\n`;
     }
-    textSummary += "(https://snotih.netlify.app/)"
+    textSummary += `\n🔗 https://snotih.netlify.app/`;
+
+    const discordEmbed = {
+      title: `📊 Raport Curs Valutar — ${rates.date}`,
+      url: 'https://snotih.netlify.app/',
+      color: 0x3B82F6, // Royal Blue accent
+      fields: [
+        {
+          name: '💶 EUR / RON (BNR)',
+          value: `**${rates.eurRonBnr.toFixed(4)}** RON\n${devEurRon >= 0 ? '🟢' : '🔴'} **${formattedDevEurRon}** față de medie\n*(medie 30 zile: ${avgEurRon.toFixed(4)})*`,
+          inline: true,
+        },
+        {
+          name: '💵 EUR / USD (Yahoo)',
+          value: `**${rates.eurUsdYahoo.toFixed(4)}** USD\n${devEurUsd >= 0 ? '🟢' : '🔴'} **${formattedDevEurUsd}** față de medie\n*(medie 30 zile: ${avgEurUsd.toFixed(4)})*`,
+          inline: true,
+        },
+        {
+          name: '🇷🇴 100 RON în USD',
+          value: `**${ronToUsd100.toFixed(2)}** $\n${devRonToUsd >= 0 ? '🟢' : '🔴'} **${formattedDevRonToUsd}** față de medie\n*(medie 30 zile: ${avgRonToUsd.toFixed(2)} $)*`,
+          inline: true,
+        },
+        {
+          name: `📅 Luna Precedentă (${formattedMonth})`,
+          value: prevMonthStats
+            ? `• **EUR/RON:** Min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ Max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n` +
+              `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})`
+            : 'Nu există date disponibile.',
+          inline: false,
+        },
+      ],
+      footer: {
+        text: 'Snotih • Curs Valutar BNR & Yahoo Finance',
+      },
+      timestamp: new Date().toISOString(),
+    };
 
     const payload = {
+      username: 'Snotih Bot',
       content: textSummary,
+      embeds: [discordEmbed],
       success: true,
       timestamp: new Date().toISOString(),
       currentRate: {
