@@ -286,18 +286,31 @@ export default function RateChart({
                   x2={xEnd}
                   y2={avgY}
                   stroke={color}
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  opacity={0.9}
+                />
+                {/* High-contrast badge container for Average text */}
+                <Rect
+                  x={xStart + 6}
+                  y={avgY - 18}
+                  width={96}
+                  height={22}
+                  rx={5}
+                  fill="#0F172A"
+                  stroke={color}
                   strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  opacity={0.8}
+                  opacity={0.95}
                 />
                 <TextSVG
-                  x={xStart + 10}
-                  y={avgY - 6}
-                  fill={color}
-                  fontSize={10}
+                  x={xStart + 54}
+                  y={avgY - 3}
+                  fill="#FFFFFF"
+                  fontSize={11}
                   fontWeight="bold"
+                  textAnchor="middle"
                 >
-                  Avg: {average.toFixed(4)}
+                  Medie: {average.toFixed(4)}
                 </TextSVG>
               </G>
 
