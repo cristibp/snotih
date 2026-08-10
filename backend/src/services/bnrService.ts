@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 
-const BNR_URL = 'https://www.bnr.ro/nbrfxrates.xml';
+const BNR_URL = 'https://curs.bnr.ro/nbrfxrates.xml';
 
 /**
  * Descarca XML-ul oficial BNR si extrage cursul EUR/RON.
@@ -65,7 +65,7 @@ export interface DatedBnrRate {
  * URL exemplu: https://www.bnr.ro/files/xml/years/nbrfxrates2026.xml
  */
 export async function fetchBnrHistoricalYear(year: number): Promise<DatedBnrRate[]> {
-  const url = `https://www.bnr.ro/files/xml/years/nbrfxrates${year}.xml`;
+  const url = `https://curs.bnr.ro/files/xml/years/nbrfxrates${year}.xml`;
 
   const response = await axios.get<string>(url, {
     responseType: 'text',

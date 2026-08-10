@@ -118,7 +118,7 @@ sau inceputul unei luni noi) istoricul nu contine inca nicio zi din luna
 curenta, backend-ul completeaza automat toate zilele lucratoare de la 1 ale
 lunii pana azi, folosind:
 
-- **arhiva anuala BNR** (`https://www.bnr.ro/files/xml/years/nbrfxratesYYYY.xml`)
+- **arhiva anuala BNR** (`https://curs.bnr.ro/files/xml/years/nbrfxratesYYYY.xml`)
   pentru EUR/RON,
 - **seria temporala Frankfurter.app** pentru EUR/USD.
 
