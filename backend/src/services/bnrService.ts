@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
+import { readRates, readHistory } from './rateStore';
 
 const BNR_PRIMARY_URL = 'https://curs.bnr.ro/nbrfxrates.xml';
 const BNR_FALLBACK_URL = 'https://www.bnr.ro/nbrfxrates.xml';
@@ -12,31 +13,94 @@ const HTTP_HEADERS = {
 /**
  * Descarca XML-ul oficial BNR si extrage cursul EUR/RON.
  * URL direct: https://curs.bnr.ro/nbrfxrates.xml
- * Structura XML (simplificata):
- * <DataSet>
- *   <Body>
- *     <Cube date="...">
- *       <Rate currency="EUR">4.9750</Rate>
- *       ...
- *     </Cube>
- *   </Body>
- * </DataSet>
  */
 export async function fetchBnrEurRon(): Promise<number> {
   let responseData: string;
 
   try {
+    try {
+      const response = await axios.get<string>(BNR_PRIMARY_URL, {
+        responseType: 'text',
+        timeout: 8000,
+        headers: HTTP_HEADERS,
+      });
+      responseData = response.data;
+    } catch (primaryErr: any) {
+      console.warn(`[BNR] Preluare de la ${BNR_PRIMARY_URL} esuata, incercam fallback pe ${BNR_FALLBACK_URL}...`, primaryErr?.message || primaryErr);
+      const response = await axios.get<string>(BNR_FALLBACK_URL, {
+        responseType: 'text',
+        timeout: 8000,
+        headers: HTTP_HEADERS,
+      });
+      responseData = response.data;
+    }
+
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+    });
+
+    const parsed = parser.parse(responseData);
+    const cube = parsed?.DataSet?.Body?.Cube;
+
+    if (!cube) {
+      throw new Error('Structura XML BNR neasteptata: lipseste Body.Cube');
+    }
+
+    const rates = Array.isArray(cube.Rate) ? cube.Rate : [cube.Rate];
+    const eurRate = rates.find((r: any) => r?.['@_currency'] === 'EUR');
+
+    if (eurRate === undefined) {
+      throw new Error('Cursul EUR nu a fost gasit in raspunsul BNR');
+    }
+
+    const rawValue = typeof eurRate === 'object' ? eurRate['#text'] : eurRate;
+    const value = parseFloat(String(rawValue).replace(',', '.'));
+
+    if (Number.isNaN(value)) {
+      throw new Error('Valoarea cursului EUR nu a putut fi interpretata ca numar');
+    }
+
+    return value;
+  } catch (err: any) {
+    console.warn('[BNR] Preluarea BNR EUR/RON a esuat din sursele HTTP:', err?.message || err);
+    const cachedRates = readRates();
+    if (cachedRates?.eurRonBnr) {
+      console.warn('[BNR] Se foloseste valoarea EUR/RON din cache-ul local:', cachedRates.eurRonBnr);
+      return cachedRates.eurRonBnr;
+    }
+    const history = readHistory();
+    if (history.length > 0) {
+      const lastEntry = history[history.length - 1];
+      if (lastEntry.eurRonBnr) {
+        console.warn('[BNR] Se foloseste valoarea EUR/RON din ultimul istoric:', lastEntry.eurRonBnr);
+        return lastEntry.eurRonBnr;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Descarca XML-ul BNR si extrage cursurile EUR/RON si USD/RON pentru a calcula EUR/USD.
+ * EUR/USD = (EUR in RON) / (USD in RON).
+ * Utilitara de rezerva in cazul in care API-urile externe de schimb valutar sunt indisponibile.
+ */
+export async function fetchBnrEurUsd(): Promise<number> {
+  let responseData: string;
+
+  try {
     const response = await axios.get<string>(BNR_PRIMARY_URL, {
       responseType: 'text',
-      timeout: 10000,
+      timeout: 5000,
       headers: HTTP_HEADERS,
     });
     responseData = response.data;
-  } catch (primaryErr) {
-    console.warn(`Preluare de la ${BNR_PRIMARY_URL} esuata, incercam fallback pe ${BNR_FALLBACK_URL}...`, primaryErr);
+  } catch (primaryErr: any) {
+    console.warn(`[BNR] Preluare de la ${BNR_PRIMARY_URL} esuata, incercam fallback pe ${BNR_FALLBACK_URL}...`, primaryErr?.message || primaryErr);
     const response = await axios.get<string>(BNR_FALLBACK_URL, {
       responseType: 'text',
-      timeout: 10000,
+      timeout: 5000,
       headers: HTTP_HEADERS,
     });
     responseData = response.data;
@@ -55,22 +119,24 @@ export async function fetchBnrEurRon(): Promise<number> {
   }
 
   const rates = Array.isArray(cube.Rate) ? cube.Rate : [cube.Rate];
-  const eurRate = rates.find((r: any) => r?.['@_currency'] === 'EUR');
+  const eurRateObj = rates.find((r: any) => r?.['@_currency'] === 'EUR');
+  const usdRateObj = rates.find((r: any) => r?.['@_currency'] === 'USD');
 
-  if (eurRate === undefined) {
-    throw new Error('Cursul EUR nu a fost gasit in raspunsul BNR');
+  if (!eurRateObj || !usdRateObj) {
+    throw new Error('Cursurile EUR sau USD nu au fost gasite in raspunsul BNR');
   }
 
-  // fast-xml-parser poate returna fie un obiect { '#text': '4.9750', '@_currency': 'EUR' },
-  // fie direct valoarea text daca nu mai exista alte atribute pe element.
-  const rawValue = typeof eurRate === 'object' ? eurRate['#text'] : eurRate;
-  const value = parseFloat(String(rawValue).replace(',', '.'));
+  const rawEur = typeof eurRateObj === 'object' ? eurRateObj['#text'] : eurRateObj;
+  const rawUsd = typeof usdRateObj === 'object' ? usdRateObj['#text'] : usdRateObj;
 
-  if (Number.isNaN(value)) {
-    throw new Error('Valoarea cursului EUR nu a putut fi interpretata ca numar');
+  const eur = parseFloat(String(rawEur).replace(',', '.'));
+  const usd = parseFloat(String(rawUsd).replace(',', '.'));
+
+  if (Number.isNaN(eur) || Number.isNaN(usd) || usd === 0) {
+    throw new Error('Valoarea cursului EUR sau USD din BNR nu este valida');
   }
 
-  return value;
+  return parseFloat((eur / usd).toFixed(6));
 }
 
 export interface DatedBnrRate {
