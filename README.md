@@ -105,11 +105,13 @@ Scaneaza codul QR cu aplicatia **Expo Go** de pe telefon pentru a testa rapid.
 | POST   | `/api/register-token`  | Inregistreaza un ExpoPushToken pentru notificari                  |
 | GET    | `/api/fetch-rates`     | Trigger protejat prin secret; actualizeaza toate datele de mai sus, apelat de Cron-Job.org |
 | GET    | `/api/backfill-month`  | Trigger manual protejat prin secret; extrage datele lipsa pentru luna curenta |
+| GET    | `/api/rsi/status`      | Returneaza valorile RSI curente si preturile pentru lista activa de simboluri |
+| GET/POST | `/api/rsi/check`     | Verifica RSI si trimite alerte Discord pe `#trading` pentru RSI <= 40 (🔵 <=40, 🟠 <=35, 🔴 <=30) |
+| GET    | `/api/rsi/symbols`     | Returneaza configuratia curenta de simboluri (active, suprascrise, default) |
+| POST   | `/api/rsi/symbols`     | Suprascrie lista de simboluri din frontend |
+| POST   | `/api/rsi/symbols/reset` | Reseteaza lista de simboluri la valorile default din `.env` |
 
-Datele sunt persistate in `backend/data/` in 4 fisiere: `rates.json`
-(ultimul curs), `history.json` (tot istoricul), `tokens.json`
-(token-urile push) si `monthlyStats.json` (min/max pe luna, recalculat
-automat la fiecare `fetch-rates`).
+Datele sunt persistate in `backend/data/` in fisiere JSON: `rates.json`, `history.json`, `tokens.json`, `monthlyStats.json` si `rsiSymbols.json`.
 
 ## 7. Backfill automat pentru luna curenta
 

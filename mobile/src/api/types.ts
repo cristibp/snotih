@@ -30,3 +30,43 @@ export interface MonthlyStat {
     max: MonthlyExtreme;
   };
 }
+
+export type RsiAlertTier = 'red' | 'orange' | 'blue' | 'none';
+
+export interface RsiSymbolResult {
+  symbol: string;
+  resolvedSymbol: string;
+  name?: string;
+  currency?: string;
+  currentPrice: number;
+  rsi: number;
+  tier: RsiAlertTier;
+  colorHex: string;
+  colorInt: number;
+  triggered: boolean;
+  message: string;
+  lastUpdated: string;
+  error?: string;
+}
+
+export interface RsiSymbolsConfig {
+  symbols: string[];
+  isOverridden: boolean;
+  envDefaults: string[];
+}
+
+export interface RsiStatusResponse {
+  timestamp: string;
+  config: RsiSymbolsConfig;
+  results: RsiSymbolResult[];
+}
+
+export interface RsiCheckResponse {
+  timestamp: string;
+  totalChecked: number;
+  totalTriggered: number;
+  results: RsiSymbolResult[];
+  discordNotified: boolean;
+  discordChannel: string;
+  discordDetails?: string;
+}

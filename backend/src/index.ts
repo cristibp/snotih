@@ -18,7 +18,16 @@ import {
 } from './services/rateStore';
 import { sendPushToAll } from './services/pushService';
 import { backfillCurrentMonthIfNeeded, backfill10YearsIfNeeded } from './services/backfillService';
-import { ExchangeRates } from './types';
+import {
+  checkAllSymbolsRsi,
+  sendTradingDiscordAlert,
+} from './services/rsiService';
+import {
+  getRsiSymbolsConfig,
+  saveRsiSymbols,
+  resetRsiSymbols,
+} from './services/rsiStore';
+import { ExchangeRates, RsiCheckResponse } from './types';
 
 dotenv.config();
 
@@ -244,6 +253,125 @@ app.post('/api/trigger-webhook', async (req, res) => {
     });
   }
 });
+
+/**
+ * GET /api/rsi/symbols
+ * Returneaza configuratia curenta de simboluri (active, suprascrise, si default din env).
+ */
+app.get('/api/rsi/symbols', (_req, res) => {
+  const config = getRsiSymbolsConfig();
+  return res.json(config);
+});
+
+/**
+ * POST /api/rsi/symbols
+ * Suprascrie lista de simboluri din frontend.
+ * Body: { symbols: string[] }
+ */
+app.post('/api/rsi/symbols', (req, res) => {
+  const { symbols } = req.body ?? {};
+  if (!symbols || !Array.isArray(symbols)) {
+    return res.status(400).json({ error: 'Campul "symbols" (array de string-uri) este obligatoriu.' });
+  }
+
+  const updatedConfig = saveRsiSymbols(symbols);
+  return res.json({ success: true, config: updatedConfig });
+});
+
+/**
+ * POST /api/rsi/symbols/reset
+ * Reseteaza lista de simboluri la valorile implicite din variabilele de mediu.
+ */
+app.post('/api/rsi/symbols/reset', (_req, res) => {
+  const resetConfig = resetRsiSymbols();
+  return res.json({ success: true, config: resetConfig });
+});
+
+/**
+ * GET /api/rsi/status
+ * Returneaza valorile RSI curente si preturile pentru simbolurile active, fara notificari pe Discord.
+ */
+app.get('/api/rsi/status', async (_req, res) => {
+  try {
+    const config = getRsiSymbolsConfig();
+    const results = await checkAllSymbolsRsi(config.symbols);
+    return res.json({
+      timestamp: new Date().toISOString(),
+      config,
+      results,
+    });
+  } catch (err: any) {
+    console.error('Eroare in /api/rsi/status:', err?.message || err);
+    return res.status(500).json({ error: 'RSI_STATUS_ERROR', details: err?.message || String(err) });
+  }
+});
+
+/**
+ * GET /api/rsi/check & POST /api/rsi/check
+ * Verifica RSI pentru simbolurile configurate (sau primite in request).
+ * Daca RSI <= 40 (Albastru <=40, Portocaliu <=35, Rosu <=30), trimite notificare pe Discord in canalul #trading.
+ */
+const handleRsiCheck = async (req: express.Request, res: express.Response) => {
+  try {
+    const secretFromQuery = req.query.secret;
+    const secretFromHeader = req.headers['x-cron-secret'];
+    const providedSecret = secretFromQuery ?? secretFromHeader;
+
+    if (CRON_SECRET && providedSecret && providedSecret !== CRON_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized: secret invalid.' });
+    }
+
+    const config = getRsiSymbolsConfig();
+    const querySymbols = req.query.symbols ? String(req.query.symbols).split(',') : null;
+    const bodySymbols = req.body?.symbols && Array.isArray(req.body.symbols) ? req.body.symbols : null;
+    const symbolsToCheck = bodySymbols || querySymbols || config.symbols;
+
+    const results = await checkAllSymbolsRsi(symbolsToCheck);
+    const triggered = results.filter((r) => r.triggered);
+
+    const tradingWebhookUrl =
+      (req.query.webhookUrl as string) ||
+      req.body?.webhookUrl ||
+      process.env.DISCORD_TRADING_WEBHOOK_URL ||
+      process.env.TRADING_WEBHOOK_URL ||
+      '';
+
+    let discordNotified = false;
+    let discordDetails = '';
+
+    if (triggered.length > 0) {
+      if (tradingWebhookUrl) {
+        const discordRes = await sendTradingDiscordAlert(tradingWebhookUrl, triggered);
+        discordNotified = discordRes.success;
+        discordDetails = discordRes.success
+          ? `Notificare trimisă cu succes pe canalul #trading (${triggered.length} alerte).`
+          : `Eroare trimitere Discord: ${discordRes.error}`;
+      } else {
+        discordDetails = 'Nicio notificare trimisă: DISCORD_TRADING_WEBHOOK_URL nu este configurat.';
+      }
+    } else {
+      discordDetails = 'Niciun simbol nu a atins pragul RSI ≤ 40.';
+    }
+
+    const responsePayload: RsiCheckResponse = {
+      timestamp: new Date().toISOString(),
+      totalChecked: results.length,
+      totalTriggered: triggered.length,
+      results,
+      discordNotified,
+      discordChannel: '#trading',
+      discordDetails,
+    };
+
+    return res.json(responsePayload);
+  } catch (err: any) {
+    console.error('Eroare in /api/rsi/check:', err?.message || err);
+    return res.status(500).json({ error: 'RSI_CHECK_ERROR', details: err?.message || String(err) });
+  }
+};
+
+app.get('/api/rsi/check', handleRsiCheck);
+app.post('/api/rsi/check', handleRsiCheck);
 
 
 /**
