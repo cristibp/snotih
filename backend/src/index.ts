@@ -100,7 +100,6 @@ app.post('/api/trigger-webhook', async (req, res) => {
   const webhookUrl =
     req.body?.webhookUrl ||
     (req.query?.webhookUrl as string) ||
-    process.env.DISCORD_WEBHOOK_URL ||
     process.env.WEBHOOK_URL;
 
   if (!webhookUrl || typeof webhookUrl !== 'string') {
