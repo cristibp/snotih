@@ -97,10 +97,16 @@ app.get('/api/stats', (_req, res) => {
  * Trimite detaliile despre cursul curent si cel din luna precedenta pe un webhook.
  */
 app.post('/api/trigger-webhook', async (req, res) => {
-  const { webhookUrl } = req.body ?? {};
+  const webhookUrl =
+    req.body?.webhookUrl ||
+    (req.query?.webhookUrl as string) ||
+    process.env.DISCORD_WEBHOOK_URL ||
+    process.env.WEBHOOK_URL;
 
   if (!webhookUrl || typeof webhookUrl !== 'string') {
-    return res.status(400).json({ error: 'Campul "webhookUrl" (string) este obligatoriu.' });
+    return res.status(400).json({
+      error: 'Campul "webhookUrl" este obligatoriu (in body, query param sau setat via DISCORD_WEBHOOK_URL in .env).',
+    });
   }
 
   try {

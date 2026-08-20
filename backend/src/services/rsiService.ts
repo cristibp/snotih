@@ -223,20 +223,18 @@ export async function checkAllSymbolsRsi(symbols: string[]): Promise<RsiSymbolRe
   return Promise.all(promises);
 }
 
-const DISCORD_PROXY_HOST = 'discord-api-proxy.batusel-cristian-a1b.workers.dev';
 
 /**
  * Transforma URL-ul webhook-ului Discord pentru a folosi proxy-ul Cloudflare si header-ul secret din mediul de rulare.
  */
 export function formatDiscordWebhookRequest(webhookUrl: string) {
-  const targetUrl = webhookUrl.replace('discord.com', DISCORD_PROXY_HOST);
   const secret = process.env.PROXY_SECRET || process.env.DISCORD_PROXY_SECRET || '';
   const headers: Record<string, string> = {};
   if (secret) {
     headers['x-proxy-secret'] = secret;
   }
   return {
-    targetUrl,
+    webhookUrl,
     headers,
   };
 }
@@ -258,8 +256,8 @@ export async function sendTradingDiscordAlert(
         item.tier === 'red'
           ? '🔴 CRITIC (RSI ≤ 30)'
           : item.tier === 'orange'
-          ? '🟠 ATENȚIE (RSI ≤ 35)'
-          : '🔵 MONITORIZARE (RSI ≤ 40)';
+            ? '🟠 ATENȚIE (RSI ≤ 35)'
+            : '🔵 MONITORIZARE (RSI ≤ 40)';
 
       return {
         title: `🚨 Alertă Trading RSI — ${item.symbol}`,
