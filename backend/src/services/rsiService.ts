@@ -227,16 +227,13 @@ export async function checkAllSymbolsRsi(symbols: string[]): Promise<RsiSymbolRe
 /**
  * Transforma URL-ul webhook-ului Discord pentru a folosi proxy-ul Cloudflare si header-ul secret din mediul de rulare.
  */
-export function formatDiscordWebhookRequest(webhookUrl: string) {
+export function formatDiscordWebhookRequest() {
   const secret = process.env.PROXY_SECRET || process.env.DISCORD_PROXY_SECRET || '';
   const headers: Record<string, string> = {};
   if (secret) {
     headers['x-proxy-secret'] = secret;
   }
-  return {
-    webhookUrl,
-    headers,
-  };
+  return headers;
 }
 
 /**
@@ -306,8 +303,8 @@ export async function sendTradingDiscordAlert(
       embeds,
     };
 
-    const { targetUrl, headers } = formatDiscordWebhookRequest(webhookUrl);
-    const res = await axios.post(targetUrl, payload, {
+    const headers = formatDiscordWebhookRequest();
+    const res = await axios.post(webhookUrl, payload, {
       headers,
       timeout: 10000,
     });
