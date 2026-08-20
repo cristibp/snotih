@@ -21,6 +21,7 @@ import { backfillCurrentMonthIfNeeded, backfill10YearsIfNeeded } from './service
 import {
   checkAllSymbolsRsi,
   sendTradingDiscordAlert,
+  formatDiscordWebhookRequest,
 } from './services/rsiService';
 import {
   getRsiSymbolsConfig,
@@ -238,7 +239,11 @@ app.post('/api/trigger-webhook', async (req, res) => {
       textSummary,
     };
 
-    const response = await axios.post(webhookUrl, payload, { timeout: 10000 });
+    const { targetUrl, headers } = formatDiscordWebhookRequest(webhookUrl);
+    const response = await axios.post(targetUrl, payload, {
+      headers,
+      timeout: 10000,
+    });
 
     return res.json({
       success: true,
