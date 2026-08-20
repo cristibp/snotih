@@ -14,7 +14,7 @@ The symbols list will be configured via environment variables in `.env` (`DEFAUL
 
 > [!IMPORTANT]
 > - Default ETF symbols: `WEBN.DE` and `IWDA.AS` (with smart symbol resolver that automatically handles unadorned `WEBN` and `IWDA`).
-> - Discord `#trading` webhook URL will be configured via environment variable `DISCORD_TRADING_WEBHOOK_URL` in `backend/.env`.
+> - Discord `#trading` webhook URL will be configured via environment variable `TRADING_WEBHOOK_URL` in `backend/.env`.
 > - All RSI alerts are sent to the `#trading` webhook with corresponding Discord embed colors:
 >   - RSI $\le 30$: Red (`#EF4444` / `0xEF4444`)
 >   - RSI $\le 35$: Orange (`#F97316` / `0xF97316`)
@@ -54,7 +54,7 @@ The symbols list will be configured via environment variables in `.env` (`DEFAUL
 
 #### [MODIFY] [.env.example](file:///Users/cristianbatusel/IdeaProjects/snotih/backend/.env.example)
 - Add `DEFAULT_RSI_SYMBOLS=WEBN.DE,IWDA.AS`
-- Add `DISCORD_TRADING_WEBHOOK_URL=https://discord.com/api/webhooks/...`
+- Add `TRADING_WEBHOOK_URL=https://discord.com/api/webhooks/...`
 
 ---
 

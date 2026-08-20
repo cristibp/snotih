@@ -104,7 +104,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
 
   if (!webhookUrl || typeof webhookUrl !== 'string') {
     return res.status(400).json({
-      error: 'Campul "webhookUrl" este obligatoriu (in body, query param sau setat via DISCORD_WEBHOOK_URL in .env).',
+      error: 'Campul "webhookUrl" este obligatoriu (in body, query param sau setat via WEBHOOK_URL in .env).',
     });
   }
 
@@ -342,7 +342,6 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
     const tradingWebhookUrl =
       (req.query.webhookUrl as string) ||
       req.body?.webhookUrl ||
-      process.env.DISCORD_TRADING_WEBHOOK_URL ||
       process.env.TRADING_WEBHOOK_URL ||
       '';
 
@@ -357,7 +356,7 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
           ? `Notificare trimisă cu succes pe canalul #trading (${triggered.length} alerte).`
           : `Eroare trimitere Discord: ${discordRes.error}`;
       } else {
-        discordDetails = 'Nicio notificare trimisă: DISCORD_TRADING_WEBHOOK_URL nu este configurat.';
+        discordDetails = 'Nicio notificare trimisă: TRADING_WEBHOOK_URL nu este configurat.';
       }
     } else {
       discordDetails = 'Niciun simbol nu a atins pragul RSI ≤ 40.';
