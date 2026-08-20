@@ -195,7 +195,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
           name: `📅 Luna Precedentă (${formattedMonth})`,
           value: prevMonthStats
             ? `• **EUR/RON:** Min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ Max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n` +
-              `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})`
+            `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})`
             : 'Nu există date disponibile.',
           inline: false,
         },
@@ -245,8 +245,8 @@ app.post('/api/trigger-webhook', async (req, res) => {
       textSummary,
     };
 
-    const { targetUrl, headers } = formatDiscordWebhookRequest(webhookUrl);
-    const response = await axios.post(targetUrl, payload, {
+    const headers = formatDiscordWebhookRequest();
+    const response = await axios.post(webhookUrl, payload, {
       headers,
       timeout: 10000,
     });
