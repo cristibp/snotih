@@ -2,59 +2,112 @@ import React, { useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import TradingScreen from './src/screens/TradingScreen';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
-export default function App() {
+function MainApp() {
   const [activeTab, setActiveTab] = useState<'rates' | 'trading'>('rates');
+  const { isBlack, colors, toggleTheme } = useTheme();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
-      <View style={styles.navBar}>
-        <View style={styles.segmentedControl}>
-          <TouchableOpacity
-            style={[styles.segmentButton, activeTab === 'rates' && styles.segmentButtonActive]}
-            onPress={() => setActiveTab('rates')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.segmentText, activeTab === 'rates' && styles.segmentTextActive]}>
-              💶 Curs Valutar
-            </Text>
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={colors.statusBar}
+        backgroundColor={colors.nav}
+      />
+      <View style={[styles.navBar, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
+        <View style={styles.navContentRow}>
+          <View style={[styles.segmentedControl, { backgroundColor: colors.segmentBackground }]}>
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                activeTab === 'rates' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+              ]}
+              onPress={() => setActiveTab('rates')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: colors.segmentText },
+                  activeTab === 'rates' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                ]}
+              >
+                💶 Curs Valutar
+              </Text>
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                activeTab === 'trading' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+              ]}
+              onPress={() => setActiveTab('trading')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: colors.segmentText },
+                  activeTab === 'trading' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                ]}
+              >
+                📈 Trading (RSI)
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Theme Toggle Button */}
           <TouchableOpacity
-            style={[styles.segmentButton, activeTab === 'trading' && styles.segmentButtonActive]}
-            onPress={() => setActiveTab('trading')}
-            activeOpacity={0.8}
+            style={[
+              styles.themeToggle,
+              {
+                backgroundColor: colors.toggleBtnBg,
+                borderColor: colors.toggleBtnBorder,
+              },
+            ]}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+            accessibilityLabel={isBlack ? 'Comută pe tema luminoasă' : 'Comută pe tema neagră'}
           >
-            <Text style={[styles.segmentText, activeTab === 'trading' && styles.segmentTextActive]}>
-              📈 Trading (RSI)
+            <Text style={styles.themeToggleIcon}>
+              {isBlack ? '☀️' : '🌙'}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
         {activeTab === 'rates' ? <HomeScreen /> : <TradingScreen />}
       </View>
     </SafeAreaView>
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <MainApp />
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   navBar: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  },
+  navContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   segmentedControl: {
+    flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     padding: 3,
   },
@@ -66,9 +119,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
@@ -76,14 +128,22 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
   },
   segmentTextActive: {
-    color: '#111827',
     fontWeight: '700',
+  },
+  themeToggle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeToggleIcon: {
+    fontSize: 18,
   },
   contentContainer: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
   },
 });

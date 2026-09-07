@@ -15,6 +15,8 @@ import DropdownSelector, { DropdownOption } from '../components/DropdownSelector
 import { HistoryEntry } from '../api/types';
 import buildInfo from '../constants/buildInfo.json';
 
+import { useTheme } from '../theme/ThemeContext';
+
 const INTERVAL_OPTIONS: DropdownOption[] = [
   { label: '1 Lună', value: '1m' },
   { label: '3 Luni', value: '3m' },
@@ -65,13 +67,13 @@ function downsampleData(data: HistoryEntry[], maxPoints = 80): HistoryEntry[] {
 }
 
 export default function HomeScreen() {
+  const { colors, isBlack } = useTheme();
   const { rates, isLoading, error, refresh } = useExchangeRates();
   const { history, monthlyStats, refresh: refreshHistory } = useHistory();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInterval, setSelectedInterval] = useState<string>('1m');
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -128,23 +130,23 @@ export default function HomeScreen() {
 
   const RateComparison = ({ currentVal, prevVal, avgVal }: { currentVal: number; prevVal: number | null; avgVal: number }) => {
     let prevStr = 'Față de ieri: N/A';
-    let prevColor = '#6B7280';
+    let prevColor = colors.textMuted;
     if (prevVal !== null && prevVal > 0) {
       const diff = ((currentVal - prevVal) / prevVal) * 100;
       const sign = diff >= 0 ? '+' : '';
       const word = diff >= 0 ? 'apreciat' : 'depreciat';
       prevStr = `Față de ieri: ${sign}${diff.toFixed(2)}% (${word})`;
-      prevColor = diff >= 0 ? '#10B981' : '#EF4444';
+      prevColor = diff >= 0 ? colors.success : colors.danger;
     }
 
     let avgStr = 'Față de medie: N/A';
-    let avgColor = '#6B7280';
+    let avgColor = colors.textMuted;
     if (avgVal > 0) {
       const diff = ((currentVal - avgVal) / avgVal) * 100;
       const sign = diff >= 0 ? '+' : '';
       const word = diff >= 0 ? 'apreciat' : 'depreciat';
       avgStr = `Față de medie: ${sign}${diff.toFixed(2)}% (${word})`;
-      avgColor = diff >= 0 ? '#10B981' : '#EF4444';
+      avgColor = diff >= 0 ? colors.success : colors.danger;
     }
 
     return (
@@ -157,42 +159,51 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
-      <Text style={styles.title}>Curs Valutar</Text>
+      <Text style={[styles.title, { color: colors.text }]}>Curs Valutar</Text>
 
-      {isLoading && !rates && <ActivityIndicator size="large" color="#2E7D32" />}
+      {isLoading && !rates && <ActivityIndicator size="large" color={colors.primary} />}
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>}
 
       {(activeEntry || rates) && (
-        <View style={styles.card}>
-          <Text style={styles.date}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.cardBorder,
+              borderWidth: isBlack ? 1 : 0,
+            },
+          ]}
+        >
+          <Text style={[styles.date, { color: colors.textMuted }]}>
             Data: {activeEntry ? activeEntry.date : rates?.date} 
             {activeIndex !== null ? ' (Selectat din grafic)' : ' (Cel mai recent)'}
           </Text>
 
-          <View style={styles.rateBlock}>
-            <View style={styles.row}>
-              <Text style={styles.label}>EUR/RON (BNR)</Text>
-              <Text style={styles.value}>{dispEurRon.toFixed(4)}</Text>
+          <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
+            <View style={[styles.row, { borderBottomColor: colors.divider }]}>
+              <Text style={[styles.label, { color: colors.text }]}>EUR/RON (BNR)</Text>
+              <Text style={[styles.value, { color: colors.primary }]}>{dispEurRon.toFixed(4)}</Text>
             </View>
             <RateComparison currentVal={dispEurRon} prevVal={prevEurRon} avgVal={avgEurRon} />
           </View>
 
-          <View style={styles.rateBlock}>
-            <View style={styles.row}>
-              <Text style={styles.label}>EUR/USD</Text>
-              <Text style={styles.value}>{dispEurUsd.toFixed(4)}</Text>
+          <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
+            <View style={[styles.row, { borderBottomColor: colors.divider }]}>
+              <Text style={[styles.label, { color: colors.text }]}>EUR/USD</Text>
+              <Text style={[styles.value, { color: colors.accentBlue }]}>{dispEurUsd.toFixed(4)}</Text>
             </View>
             <RateComparison currentVal={dispEurUsd} prevVal={prevEurUsd} avgVal={avgEurUsd} />
           </View>
 
-          <View style={styles.rateBlock}>
-            <View style={styles.row}>
-              <Text style={styles.label}>100 RON în USD</Text>
-              <Text style={[styles.value, { color: '#8B5CF6' }]}>
+          <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
+            <View style={[styles.row, { borderBottomColor: colors.divider }]}>
+              <Text style={[styles.label, { color: colors.text }]}>100 RON în USD</Text>
+              <Text style={[styles.value, { color: colors.accentPurple }]}>
                 {dispRonToUsd.toFixed(2)} $
               </Text>
             </View>
@@ -201,8 +212,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-
-      <Text style={styles.sectionTitle}>Evoluție Grafice</Text>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>Evoluție Grafice</Text>
       <DropdownSelector
         options={INTERVAL_OPTIONS}
         selectedValue={selectedInterval}
@@ -216,7 +226,7 @@ export default function HomeScreen() {
         title="Evolutie EUR/RON (BNR)"
         history={chartHistoryWithConversion}
         dataKey="eurRonBnr"
-        color="#2E7D32"
+        color={colors.primary}
         activeIndex={activeIndex}
         setActiveIndex={setActiveIndex}
       />
@@ -225,7 +235,7 @@ export default function HomeScreen() {
         title="Evolutie EUR/USD"
         history={chartHistoryWithConversion}
         dataKey="eurUsdYahoo"
-        color="#1D4ED8"
+        color={colors.accentBlue}
         activeIndex={activeIndex}
         setActiveIndex={setActiveIndex}
       />
@@ -234,7 +244,7 @@ export default function HomeScreen() {
         title="Evolutie Valoare 100 RON in USD"
         history={chartHistoryWithConversion}
         dataKey="ronToUsd100"
-        color="#8B5CF6"
+        color={colors.accentPurple}
         activeIndex={activeIndex}
         setActiveIndex={setActiveIndex}
       />
@@ -242,7 +252,7 @@ export default function HomeScreen() {
       <MonthlyStatsList stats={monthlyStats} />
 
       <View style={styles.footerContainer}>
-        <Text style={styles.lastModifiedText}>
+        <Text style={[styles.lastModifiedText, { color: colors.textSubtle }]}>
           Ultima modificare cod: {buildInfo.lastModified}
         </Text>
       </View>

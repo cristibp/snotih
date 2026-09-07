@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { useTheme } from '../theme/ThemeContext';
+
 export interface DropdownOption {
   label: string;
   value: string;
@@ -28,6 +30,7 @@ export default function DropdownSelector({
   onValueChange,
   placeholder = 'Selecteaza...',
 }: DropdownSelectorProps) {
+  const { colors, isBlack } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
 
   const selectedOption = options.find((opt) => opt.value === selectedValue);
@@ -40,17 +43,24 @@ export default function DropdownSelector({
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={styles.triggerButton}
+        style={[
+          styles.triggerButton,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: isBlack ? 1 : 1,
+          },
+        ]}
         activeOpacity={0.7}
         onPress={() => setIsOpen(true)}
       >
-        <Text style={styles.triggerText}>
+        <Text style={[styles.triggerText, { color: colors.text }]}>
           {selectedOption ? selectedOption.label : placeholder}
         </Text>
         <Svg width="12" height="12" viewBox="0 0 24 24" fill="none">
           <Path
             d="M6 9l6 6 6-6"
-            stroke="#4B5563"
+            stroke={colors.textMuted}
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -65,11 +75,20 @@ export default function DropdownSelector({
         onRequestClose={() => setIsOpen(false)}
       >
         <TouchableWithoutFeedback onPress={() => setIsOpen(false)}>
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
             <TouchableWithoutFeedback>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Alege intervalul</Text>
+              <View
+                style={[
+                  styles.modalContent,
+                  {
+                    backgroundColor: colors.modalContent,
+                    borderColor: colors.cardBorder,
+                    borderWidth: isBlack ? 1 : 0,
+                  },
+                ]}
+              >
+                <View style={[styles.modalHeader, { borderBottomColor: colors.modalHeaderBorder }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Alege intervalul</Text>
                 </View>
                 <FlatList
                   data={options}
@@ -80,7 +99,7 @@ export default function DropdownSelector({
                       <TouchableOpacity
                         style={[
                           styles.optionItem,
-                          isSelected && styles.optionItemActive,
+                          isSelected && [styles.optionItemActive, { backgroundColor: colors.optionItemActive }],
                         ]}
                         activeOpacity={0.6}
                         onPress={() => handleSelect(item.value)}
@@ -88,7 +107,8 @@ export default function DropdownSelector({
                         <Text
                           style={[
                             styles.optionText,
-                            isSelected && styles.optionTextActive,
+                            { color: colors.optionText },
+                            isSelected && [styles.optionTextActive, { color: colors.optionTextActive }],
                           ]}
                         >
                           {item.label}
@@ -97,7 +117,7 @@ export default function DropdownSelector({
                           <Svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <Path
                               d="M20 6L9 17l-5-5"
-                              stroke="#2E7D32"
+                              stroke={colors.primary}
                               strokeWidth="3"
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -107,7 +127,7 @@ export default function DropdownSelector({
                       </TouchableOpacity>
                     );
                   }}
-                  ItemSeparatorComponent={() => <View style={styles.separator} />}
+                  ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.divider }]} />}
                 />
               </View>
             </TouchableWithoutFeedback>

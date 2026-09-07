@@ -20,7 +20,10 @@ import {
 import { RsiCheckResponse, RsiSymbolResult, RsiSymbolsConfig } from '../api/types';
 import buildInfo from '../constants/buildInfo.json';
 
+import { useTheme } from '../theme/ThemeContext';
+
 export default function TradingScreen() {
+  const { colors, isBlack } = useTheme();
   const [config, setConfig] = useState<RsiSymbolsConfig | null>(null);
   const [rsiResults, setRsiResults] = useState<RsiSymbolResult[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -145,47 +148,65 @@ export default function TradingScreen() {
   };
 
   const getTierColor = (rsi: number) => {
-    if (rsi <= 30) return '#EF4444'; // Red
-    if (rsi <= 35) return '#F97316'; // Orange
-    if (rsi <= 40) return '#3B82F6'; // Blue
-    return '#10B981'; // Green (Neutral)
+    if (rsi <= 30) return colors.danger;
+    if (rsi <= 35) return colors.tierBearishText;
+    if (rsi <= 40) return colors.accentBlue;
+    return colors.success;
   };
 
   const getTierBadge = (rsi: number) => {
-    if (rsi <= 30) return { label: '🔴 RSI ≤ 30 (Critic)', color: '#EF4444', bg: '#FEE2E2' };
-    if (rsi <= 35) return { label: '🟠 RSI ≤ 35 (Pronunțat)', color: '#C2410C', bg: '#FFEDD5' };
-    if (rsi <= 40) return { label: '🔵 RSI ≤ 40 (Monitorizare)', color: '#1D4ED8', bg: '#DBEAFE' };
-    return { label: '🟢 RSI > 40 (Normal)', color: '#047857', bg: '#D1FAE5' };
+    if (rsi <= 30) return { label: '🔴 RSI ≤ 30 (Critic)', color: colors.tierOverboughtText, bg: colors.tierOverboughtBg };
+    if (rsi <= 35) return { label: '🟠 RSI ≤ 35 (Pronunțat)', color: colors.tierBearishText, bg: colors.tierBearishBg };
+    if (rsi <= 40) return { label: '🔵 RSI ≤ 40 (Monitorizare)', color: colors.tierBullishText, bg: colors.tierBullishBg };
+    return { label: '🟢 RSI > 40 (Normal)', color: colors.tierOversoldText, bg: colors.tierOversoldBg };
   };
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accentBlue} />}
     >
-      <Text style={styles.title}>Monitorizare RSI</Text>
-      <Text style={styles.subtitle}>
-        Alerte automate pe canalul <Text style={styles.boldText}>#trading</Text> la atingerea pragurilor RSI
+      <Text style={[styles.title, { color: colors.text }]}>Monitorizare RSI</Text>
+      <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+        Alerte automate pe canalul <Text style={[styles.boldText, { color: colors.text }]}>#trading</Text> la atingerea pragurilor RSI
       </Text>
 
       {/* Legenda Praguri Alerta */}
-      <View style={styles.legendCard}>
-        <Text style={styles.legendTitle}>Niveluri Praguri & Culori Notificare:</Text>
+      <View
+        style={[
+          styles.legendCard,
+          {
+            backgroundColor: colors.legendCardBg,
+            borderColor: colors.cardBorder,
+            borderWidth: isBlack ? 1 : 0,
+          },
+        ]}
+      >
+        <Text style={[styles.legendTitle, { color: colors.textMuted }]}>Niveluri Praguri & Culori Notificare:</Text>
         <View style={styles.legendPillsContainer}>
-          <View style={[styles.legendPill, { backgroundColor: '#DBEAFE' }]}>
-            <Text style={[styles.legendPillText, { color: '#1D4ED8' }]}>🔵 RSI ≤ 40 (Albastru)</Text>
+          <View style={[styles.legendPill, { backgroundColor: colors.tierBullishBg }]}>
+            <Text style={[styles.legendPillText, { color: colors.tierBullishText }]}>🔵 RSI ≤ 40 (Albastru)</Text>
           </View>
-          <View style={[styles.legendPill, { backgroundColor: '#FFEDD5' }]}>
-            <Text style={[styles.legendPillText, { color: '#C2410C' }]}>🟠 RSI ≤ 35 (Portocaliu)</Text>
+          <View style={[styles.legendPill, { backgroundColor: colors.tierBearishBg }]}>
+            <Text style={[styles.legendPillText, { color: colors.tierBearishText }]}>🟠 RSI ≤ 35 (Portocaliu)</Text>
           </View>
-          <View style={[styles.legendPill, { backgroundColor: '#FEE2E2' }]}>
-            <Text style={[styles.legendPillText, { color: '#B91C1C' }]}>🔴 RSI ≤ 30 (Roșu)</Text>
+          <View style={[styles.legendPill, { backgroundColor: colors.tierOverboughtBg }]}>
+            <Text style={[styles.legendPillText, { color: colors.tierOverboughtText }]}>🔴 RSI ≤ 30 (Roșu)</Text>
           </View>
         </View>
       </View>
 
       {/* Buton Verificare Manuala & Discord Trigger */}
-      <View style={styles.actionCard}>
+      <View
+        style={[
+          styles.actionCard,
+          {
+            backgroundColor: colors.actionCardBg,
+            borderColor: colors.cardBorder,
+            borderWidth: isBlack ? 1 : 0,
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.primaryButton, isChecking && styles.buttonDisabled]}
           onPress={handleRunRsiCheck}
@@ -200,17 +221,25 @@ export default function TradingScreen() {
         </TouchableOpacity>
 
         {lastCheckResponse && (
-          <View style={styles.responseBanner}>
-            <Text style={styles.responseTitle}>Rezultat Verificare:</Text>
-            <Text style={styles.responseText}>
-              • Total verificate: <Text style={styles.boldText}>{lastCheckResponse.totalChecked}</Text>
+          <View
+            style={[
+              styles.responseBanner,
+              {
+                backgroundColor: colors.responseBannerBg,
+                borderLeftColor: colors.responseBannerBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.responseTitle, { color: colors.responseTitle }]}>Rezultat Verificare:</Text>
+            <Text style={[styles.responseText, { color: colors.responseText }]}>
+              • Total verificate: <Text style={[styles.boldText, { color: colors.text }]}>{lastCheckResponse.totalChecked}</Text>
             </Text>
-            <Text style={styles.responseText}>
-              • Alerte declanșate: <Text style={styles.boldText}>{lastCheckResponse.totalTriggered}</Text>
+            <Text style={[styles.responseText, { color: colors.responseText }]}>
+              • Alerte declanșate: <Text style={[styles.boldText, { color: colors.text }]}>{lastCheckResponse.totalTriggered}</Text>
             </Text>
-            <Text style={styles.responseText}>
+            <Text style={[styles.responseText, { color: colors.responseText }]}>
               • Discord (#trading):{' '}
-              <Text style={{ color: lastCheckResponse.discordNotified ? '#10B981' : '#6B7280', fontWeight: '600' }}>
+              <Text style={{ color: lastCheckResponse.discordNotified ? colors.success : colors.textMuted, fontWeight: '600' }}>
                 {lastCheckResponse.discordDetails || (lastCheckResponse.discordNotified ? 'Trimis cu succes' : 'Nicio notificare')}
               </Text>
             </Text>
@@ -219,15 +248,23 @@ export default function TradingScreen() {
       </View>
 
       {errorMessage && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
+        <View
+          style={[
+            styles.errorBox,
+            {
+              backgroundColor: colors.errorBoxBg,
+              borderColor: colors.errorBoxBorder,
+            },
+          ]}
+        >
+          <Text style={[styles.errorText, { color: colors.errorBoxText }]}>{errorMessage}</Text>
         </View>
       )}
 
       {/* Lista Simboluri Monitorizate Live */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Simboluri Active & RSI Curent</Text>
-        {isLoading && <ActivityIndicator size="small" color="#2563EB" />}
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Simboluri Active & RSI Curent</Text>
+        {isLoading && <ActivityIndicator size="small" color={colors.accentBlue} />}
       </View>
 
       {rsiResults.map((item) => {
@@ -236,16 +273,26 @@ export default function TradingScreen() {
         const barPercent = Math.min(100, Math.max(0, item.rsi));
 
         return (
-          <View key={item.symbol} style={styles.symbolCard}>
+          <View
+            key={item.symbol}
+            style={[
+              styles.symbolCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.cardBorder,
+                borderWidth: isBlack ? 1 : 0,
+              },
+            ]}
+          >
             <View style={styles.cardHeader}>
               <View>
-                <Text style={styles.symbolCode}>{item.symbol}</Text>
-                <Text style={styles.symbolName} numberOfLines={1}>
+                <Text style={[styles.symbolCode, { color: colors.text }]}>{item.symbol}</Text>
+                <Text style={[styles.symbolName, { color: colors.textMuted }]} numberOfLines={1}>
                   {item.name || item.resolvedSymbol}
                 </Text>
               </View>
               <View style={styles.priceContainer}>
-                <Text style={styles.priceText}>
+                <Text style={[styles.priceText, { color: colors.text }]}>
                   {item.currentPrice > 0 ? `${item.currentPrice.toFixed(2)} ${item.currency || 'EUR'}` : 'N/A'}
                 </Text>
                 <View style={[styles.tierBadge, { backgroundColor: badge.bg }]}>
@@ -257,12 +304,12 @@ export default function TradingScreen() {
             {/* Bara vizuala RSI */}
             <View style={styles.rsiBarContainer}>
               <View style={styles.rsiBarLabels}>
-                <Text style={styles.rsiLabelText}>RSI (14):</Text>
+                <Text style={[styles.rsiLabelText, { color: colors.textMuted }]}>RSI (14):</Text>
                 <Text style={[styles.rsiValueText, { color: barColor }]}>
                   {item.rsi > 0 ? item.rsi.toFixed(2) : 'N/A'}
                 </Text>
               </View>
-              <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBarBackground, { backgroundColor: colors.progressBarBg }]}>
                 <View
                   style={[
                     styles.progressBarFill,
@@ -275,25 +322,42 @@ export default function TradingScreen() {
               </View>
             </View>
 
-            <Text style={styles.cardMessage}>{item.message}</Text>
+            <Text style={[styles.cardMessage, { color: colors.textMuted }]}>{item.message}</Text>
           </View>
         );
       })}
 
       {/* Sectiunea Configurare / Suprascriere Simboluri */}
-      <View style={styles.configCard}>
+      <View
+        style={[
+          styles.configCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.cardBorder,
+            borderWidth: isBlack ? 1 : 0,
+          },
+        ]}
+      >
         <View style={styles.configHeaderRow}>
-          <Text style={styles.configTitle}>⚙️ Configurare Watchlist</Text>
+          <Text style={[styles.configTitle, { color: colors.text }]}>⚙️ Configurare Watchlist</Text>
           <View
             style={[
               styles.statusChip,
-              { backgroundColor: config?.isOverridden ? '#FEF3C7' : '#E0E7FF' },
+              {
+                backgroundColor: config?.isOverridden
+                  ? isBlack ? 'rgba(245, 158, 11, 0.2)' : '#FEF3C7'
+                  : isBlack ? 'rgba(99, 102, 241, 0.2)' : '#E0E7FF',
+              },
             ]}
           >
             <Text
               style={[
                 styles.statusChipText,
-                { color: config?.isOverridden ? '#B45309' : '#3730A3' },
+                {
+                  color: config?.isOverridden
+                    ? isBlack ? '#FBBF24' : '#B45309'
+                    : isBlack ? '#A5B4FC' : '#3730A3',
+                },
               ]}
             >
               {config?.isOverridden ? 'Suprascris din Frontend' : 'Implicit din .env'}
@@ -301,21 +365,30 @@ export default function TradingScreen() {
           </View>
         </View>
 
-        <Text style={styles.configSubtitle}>
+        <Text style={[styles.configSubtitle, { color: colors.textMuted }]}>
           Poți adăuga sau șterge ETF-uri/acțiuni (ex: WEBN, IWDA, CSPX.L, VWCE.DE). Modificările suprascriu variabilele de mediu.
         </Text>
 
         {/* Chips lista curenta */}
         <View style={styles.chipsContainer}>
           {symbolChips.map((sym) => (
-            <View key={sym} style={styles.chip}>
-              <Text style={styles.chipText}>{sym}</Text>
+            <View
+              key={sym}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: colors.chipBackground,
+                  borderColor: colors.chipBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.chipText, { color: colors.chipText }]}>{sym}</Text>
               <TouchableOpacity
                 onPress={() => handleRemoveSymbol(sym)}
-                style={styles.chipRemoveBtn}
+                style={[styles.chipRemoveBtn, { backgroundColor: colors.chipRemoveBtn }]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.chipRemoveText}>✕</Text>
+                <Text style={[styles.chipRemoveText, { color: colors.chipRemoveText }]}>✕</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -324,9 +397,16 @@ export default function TradingScreen() {
         {/* Input adaugare simbol nou */}
         <View style={styles.inputRow}>
           <TextInput
-            style={styles.textInput}
+            style={[
+              styles.textInput,
+              {
+                backgroundColor: colors.inputBackground,
+                borderColor: colors.inputBorder,
+                color: colors.inputText,
+              },
+            ]}
             placeholder="Adaugă simbol (ex: WEBN, IWDA, VWCE.DE)"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.inputPlaceholder}
             value={newSymbolInput}
             onChangeText={setNewSymbolInput}
             autoCapitalize="characters"
@@ -353,18 +433,25 @@ export default function TradingScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.resetButton, isSaving && styles.buttonDisabled]}
+            style={[
+              styles.resetButton,
+              {
+                backgroundColor: colors.chipBackground,
+                borderColor: colors.chipBorder,
+              },
+              isSaving && styles.buttonDisabled,
+            ]}
             onPress={handleResetToEnv}
             disabled={isSaving}
             activeOpacity={0.8}
           >
-            <Text style={styles.resetButtonText}>🔄 Reset la ENV Defaults</Text>
+            <Text style={[styles.resetButtonText, { color: colors.textMuted }]}>🔄 Reset la ENV Defaults</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.footerContainer}>
-        <Text style={styles.lastModifiedText}>
+        <Text style={[styles.lastModifiedText, { color: colors.textSubtle }]}>
           Ultima modificare cod: {buildInfo.lastModified}
         </Text>
       </View>

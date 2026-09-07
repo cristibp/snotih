@@ -4,6 +4,8 @@ import { LineChart } from 'react-native-chart-kit';
 import { G, Circle, Rect, Text as TextSVG, Line } from 'react-native-svg';
 import { HistoryEntry } from '../api/types';
 
+import { useTheme } from '../theme/ThemeContext';
+
 interface RateChartProps {
   title: string;
   history: (HistoryEntry & { ronToUsd100?: number })[];
@@ -53,6 +55,7 @@ export default function RateChart({
   activeIndex,
   setActiveIndex,
 }: RateChartProps) {
+  const { colors, isBlack } = useTheme();
   const activeCoordsRef = React.useRef<{ x: number; y: number } | null>(null);
 
   if (history.length === 0) {
@@ -66,8 +69,17 @@ export default function RateChart({
   const values = history.map((entry) => entry[dataKey] ?? 0);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.cardBorder,
+          borderWidth: isBlack ? 1 : 0,
+        },
+      ]}
+    >
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
       <LineChart
         data={{
           labels,
@@ -92,7 +104,7 @@ export default function RateChart({
                 cx={x}
                 cy={y}
                 r={4}
-                fill="#FFFFFF"
+                fill={colors.chartDotFill}
                 stroke={color}
                 strokeWidth={1.5}
                 pointerEvents="none"
@@ -128,14 +140,15 @@ export default function RateChart({
           );
         }}
         chartConfig={{
-          backgroundColor: '#FFFFFF',
-          backgroundGradientFrom: '#FFFFFF',
-          backgroundGradientTo: '#FFFFFF',
+          backgroundColor: colors.chartBackground,
+          backgroundGradientFrom: colors.chartBackground,
+          backgroundGradientTo: colors.chartBackground,
           decimalPlaces: 4,
           color: () => color,
-          labelColor: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
+          labelColor: (opacity = 1) =>
+            isBlack ? `rgba(156, 163, 175, ${opacity})` : `rgba(75, 85, 99, ${opacity})`,
           propsForDots: { r: '0' },
-          propsForBackgroundLines: { stroke: '#F0F0F0' },
+          propsForBackgroundLines: { stroke: colors.chartLines },
         }}
         decorator={() => {
           const average = values.reduce((sum, val) => sum + val, 0) / values.length;
