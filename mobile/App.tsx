@@ -1,12 +1,62 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeScreen from './src/screens/HomeScreen';
 import TradingScreen from './src/screens/TradingScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
+export type TabType = 'rates' | 'trading';
+export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
+
+function getInitialTab(): TabType {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+      if (stored === 'rates' || stored === 'trading') {
+        return stored;
+      }
+    }
+  } catch (e) {
+    // Ignore storage read error
+  }
+  return 'rates';
+}
+
 function MainApp() {
-  const [activeTab, setActiveTab] = useState<'rates' | 'trading'>('rates');
+  const [activeTab, setActiveTabState] = useState<TabType>(getInitialTab);
   const { isBlack, colors, toggleTheme } = useTheme();
+
+  // Load persisted tab on mount (for native mobile via AsyncStorage)
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const storedTab = await AsyncStorage.getItem(TAB_STORAGE_KEY);
+        if (isMounted && (storedTab === 'rates' || storedTab === 'trading')) {
+          setActiveTabState(storedTab);
+        }
+      } catch (err) {
+        console.warn('Failed to load active tab from storage:', err);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleTabPress = (tab: TabType) => {
+    setActiveTabState(tab);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+      }
+    } catch (e) {
+      // Ignore storage write error
+    }
+    AsyncStorage.setItem(TAB_STORAGE_KEY, tab).catch((err) => {
+      console.warn('Failed to save active tab to AsyncStorage:', err);
+    });
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -22,7 +72,7 @@ function MainApp() {
                 styles.segmentButton,
                 activeTab === 'rates' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
               ]}
-              onPress={() => setActiveTab('rates')}
+              onPress={() => handleTabPress('rates')}
               activeOpacity={0.8}
             >
               <Text
@@ -41,7 +91,7 @@ function MainApp() {
                 styles.segmentButton,
                 activeTab === 'trading' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
               ]}
-              onPress={() => setActiveTab('trading')}
+              onPress={() => handleTabPress('trading')}
               activeOpacity={0.8}
             >
               <Text
