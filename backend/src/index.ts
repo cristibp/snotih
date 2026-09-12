@@ -100,11 +100,12 @@ app.post('/api/trigger-webhook', async (req, res) => {
   const webhookUrl =
     req.body?.webhookUrl ||
     (req.query?.webhookUrl as string) ||
-    process.env.WEBHOOK_URL;
+    process.env.WEBHOOK_URL ||
+    process.env.DISCORD_WEBHOOK_URL;
 
   if (!webhookUrl || typeof webhookUrl !== 'string') {
     return res.status(400).json({
-      error: 'Campul "webhookUrl" este obligatoriu (in body, query param sau setat via WEBHOOK_URL in .env).',
+      error: 'Campul "webhookUrl" este obligatoriu (in body, query param sau setat via WEBHOOK_URL / DISCORD_WEBHOOK_URL in .env).',
     });
   }
 
@@ -343,6 +344,7 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
       (req.query.webhookUrl as string) ||
       req.body?.webhookUrl ||
       process.env.TRADING_WEBHOOK_URL ||
+      process.env.DISCORD_TRADING_WEBHOOK_URL ||
       '';
 
     let discordNotified = false;
