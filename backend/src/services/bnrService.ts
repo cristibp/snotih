@@ -3,7 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { readRates, readHistory } from './rateStore';
 
 const BNR_PRIMARY_URL = 'https://curs.bnr.ro/nbrfxrates.xml';
-const BNR_FALLBACK_URL = 'https://www.bnr.ro/nbrfxrates.xml';
+const BNR_FALLBACK_URL = 'https://bnr.batusel-cristian-a1b.workers.dev';
 
 const HTTP_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
