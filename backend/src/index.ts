@@ -224,9 +224,64 @@ app.post('/api/trigger-webhook', async (req, res) => {
 
     // Luna precedenta
     textSummary += `📅 **Minim / Maxim luna precedentă (${formattedMonth}):**\n`;
+    const prevMonthHistory = history.filter((h) => h.date.startsWith(prevMonthStr) && h.eurRonBnr > 0);
+    let prevMonthRonToUsdStats: {
+      min: { value: number; date: string };
+      max: { value: number; date: string };
+    } | null = null;
+
+    if (prevMonthHistory.length > 0) {
+      let minVal = Infinity;
+      let minDate = '';
+      let maxVal = -Infinity;
+      let maxDate = '';
+      for (const h of prevMonthHistory) {
+        const val = (100 * h.eurUsdYahoo) / h.eurRonBnr;
+        if (val < minVal) {
+          minVal = val;
+          minDate = h.date;
+        }
+        if (val > maxVal) {
+          maxVal = val;
+          maxDate = h.date;
+        }
+      }
+      if (minVal !== Infinity && maxVal !== -Infinity) {
+        prevMonthRonToUsdStats = {
+          min: { value: minVal, date: minDate },
+          max: { value: maxVal, date: maxDate },
+        };
+      }
+    }
+
+    let pctMinEurRon = 0;
+    let pctMaxEurRon = 0;
+    let pctMinEurUsd = 0;
+    let pctMaxEurUsd = 0;
+    let pctMinRonUsd = 0;
+    let pctMaxRonUsd = 0;
+
     if (prevMonthStats) {
-      textSummary += `• **EUR / RON:** min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n`;
-      textSummary += `• **EUR / USD:** min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})\n`;
+      const minEurRon = prevMonthStats.eurRonBnr.min.value;
+      const maxEurRon = prevMonthStats.eurRonBnr.max.value;
+      pctMinEurRon = minEurRon > 0 ? ((rates.eurRonBnr - minEurRon) / minEurRon) * 100 : 0;
+      pctMaxEurRon = maxEurRon > 0 ? ((rates.eurRonBnr - maxEurRon) / maxEurRon) * 100 : 0;
+
+      const minEurUsd = prevMonthStats.eurUsdYahoo.min.value;
+      const maxEurUsd = prevMonthStats.eurUsdYahoo.max.value;
+      pctMinEurUsd = minEurUsd > 0 ? ((rates.eurUsdYahoo - minEurUsd) / minEurUsd) * 100 : 0;
+      pctMaxEurUsd = maxEurUsd > 0 ? ((rates.eurUsdYahoo - maxEurUsd) / maxEurUsd) * 100 : 0;
+
+      textSummary += `• **EUR / RON:** min \`${minEurRon.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}, \`${formatPct(pctMinEurRon)}\`) │ max \`${maxEurRon.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date}, \`${formatPct(pctMaxEurRon)}\`)\n`;
+      textSummary += `• **EUR / USD:** min \`${minEurUsd.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}, \`${formatPct(pctMinEurUsd)}\`) │ max \`${maxEurUsd.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date}, \`${formatPct(pctMaxEurUsd)}\`)\n`;
+
+      if (prevMonthRonToUsdStats) {
+        const minRonUsd = prevMonthRonToUsdStats.min.value;
+        const maxRonUsd = prevMonthRonToUsdStats.max.value;
+        pctMinRonUsd = minRonUsd > 0 ? ((ronToUsd100 - minRonUsd) / minRonUsd) * 100 : 0;
+        pctMaxRonUsd = maxRonUsd > 0 ? ((ronToUsd100 - maxRonUsd) / maxRonUsd) * 100 : 0;
+        textSummary += `• **100 RON în USD:** min \`${minRonUsd.toFixed(2)} $\` (${prevMonthRonToUsdStats.min.date}, \`${formatPct(pctMinRonUsd)}\`) │ max \`${maxRonUsd.toFixed(2)} $\` (${prevMonthRonToUsdStats.max.date}, \`${formatPct(pctMaxRonUsd)}\`)\n`;
+      }
     } else {
       textSummary += `• Nu există date disponibile pentru luna precedentă.\n`;
     }
@@ -297,8 +352,31 @@ app.post('/api/trigger-webhook', async (req, res) => {
         ? {
             month: prevMonthStats.month,
             formattedMonth,
-            eurRonBnr: prevMonthStats.eurRonBnr,
-            eurUsdYahoo: prevMonthStats.eurUsdYahoo,
+            eurRonBnr: {
+              ...prevMonthStats.eurRonBnr,
+              minDeviationPercent: parseFloat(pctMinEurRon.toFixed(4)),
+              maxDeviationPercent: parseFloat(pctMaxEurRon.toFixed(4)),
+              formattedMinDeviation: formatPct(pctMinEurRon),
+              formattedMaxDeviation: formatPct(pctMaxEurRon),
+            },
+            eurUsdYahoo: {
+              ...prevMonthStats.eurUsdYahoo,
+              minDeviationPercent: parseFloat(pctMinEurUsd.toFixed(4)),
+              maxDeviationPercent: parseFloat(pctMaxEurUsd.toFixed(4)),
+              formattedMinDeviation: formatPct(pctMinEurUsd),
+              formattedMaxDeviation: formatPct(pctMaxEurUsd),
+            },
+            ...(prevMonthRonToUsdStats
+              ? {
+                  ronToUsd100: {
+                    ...prevMonthRonToUsdStats,
+                    minDeviationPercent: parseFloat(pctMinRonUsd.toFixed(4)),
+                    maxDeviationPercent: parseFloat(pctMaxRonUsd.toFixed(4)),
+                    formattedMinDeviation: formatPct(pctMinRonUsd),
+                    formattedMaxDeviation: formatPct(pctMaxRonUsd),
+                  },
+                }
+              : {}),
           }
         : null,
       textSummary,
