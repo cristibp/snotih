@@ -158,58 +158,84 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
     const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
 
-    let textSummary = `**📊 Raport Curs Valutar — ${rates.date}**\n\n`;
-    textSummary += `**💶 EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)}\` RON (${devEurRon >= 0 ? '🟢 +' : '🔴 '}${devEurRon.toFixed(2)}% vs medie: ${avgEurRon.toFixed(4)})\n`;
-    textSummary += `**💵 EUR / USD:** \`${rates.eurUsdYahoo.toFixed(4)}\` USD (${devEurUsd >= 0 ? '🟢 +' : '🔴 '}${devEurUsd.toFixed(2)}% vs medie: ${avgEurUsd.toFixed(4)})\n`;
-    textSummary += `**🇷🇴 100 RON în USD:** \`${ronToUsd100.toFixed(2)}\` $ (${devRonToUsd >= 0 ? '🟢 +' : '🔴 '}${devRonToUsd.toFixed(2)}% vs medie: ${avgRonToUsd.toFixed(2)} $)\n\n`;
-    textSummary += `**📅 Minim / Maxim (${formattedMonth}):**\n`;
-    if (prevMonthStats) {
-      textSummary += `• **EUR/RON:** Min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ Max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n`;
-      textSummary += `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})\n`;
-    } else {
-      textSummary += `Nu există date disponibile pentru luna precedentă.\n`;
+    // Gasim intrarea pentru ziua anterioara
+    const sortedHistory = [...history].sort((a, b) => a.date.localeCompare(b.date));
+    const priorEntries = sortedHistory.filter((h) => h.date < rates.date);
+    let prevDay: ExchangeRates | null = null;
+    if (priorEntries.length > 0) {
+      prevDay = priorEntries[priorEntries.length - 1];
+    } else if (sortedHistory.length > 1) {
+      const currentIndex = sortedHistory.findIndex((h) => h.date === rates.date);
+      if (currentIndex > 0) {
+        prevDay = sortedHistory[currentIndex - 1];
+      }
     }
-    textSummary += `\n🔗 https://snotih.netlify.app/`;
 
-    const discordEmbed = {
-      title: `📊 Raport Curs Valutar — ${rates.date}`,
-      url: 'https://snotih.netlify.app/',
-      color: 0x3B82F6, // Royal Blue accent
-      fields: [
-        {
-          name: '💶 EUR / RON (BNR)',
-          value: `**${rates.eurRonBnr.toFixed(4)}** RON\n${devEurRon >= 0 ? '🟢' : '🔴'} **${formattedDevEurRon}** față de medie\n*(medie 30 zile: ${avgEurRon.toFixed(4)})*`,
-          inline: true,
-        },
-        {
-          name: '💵 EUR / USD (Yahoo)',
-          value: `**${rates.eurUsdYahoo.toFixed(4)}** USD\n${devEurUsd >= 0 ? '🟢' : '🔴'} **${formattedDevEurUsd}** față de medie\n*(medie 30 zile: ${avgEurUsd.toFixed(4)})*`,
-          inline: true,
-        },
-        {
-          name: '🇷🇴 100 RON în USD',
-          value: `**${ronToUsd100.toFixed(2)}** $\n${devRonToUsd >= 0 ? '🟢' : '🔴'} **${formattedDevRonToUsd}** față de medie\n*(medie 30 zile: ${avgRonToUsd.toFixed(2)} $)*`,
-          inline: true,
-        },
-        {
-          name: `📅 Luna Precedentă (${formattedMonth})`,
-          value: prevMonthStats
-            ? `• **EUR/RON:** Min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ Max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n` +
-            `• **EUR/USD:** Min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ Max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})`
-            : 'Nu există date disponibile.',
-          inline: false,
-        },
-      ],
-      footer: {
-        text: 'Snotih • Curs Valutar BNR & Yahoo Finance',
-      },
-      timestamp: new Date().toISOString(),
+    const prevRonToUsd100 = prevDay && prevDay.eurRonBnr > 0
+      ? (100 * prevDay.eurUsdYahoo) / prevDay.eurRonBnr
+      : null;
+
+    const diffEurRon = prevDay ? rates.eurRonBnr - prevDay.eurRonBnr : null;
+    const pctEurRon = prevDay && prevDay.eurRonBnr > 0 ? (diffEurRon! / prevDay.eurRonBnr) * 100 : null;
+
+    const diffEurUsd = prevDay ? rates.eurUsdYahoo - prevDay.eurUsdYahoo : null;
+    const pctEurUsd = prevDay && prevDay.eurUsdYahoo > 0 ? (diffEurUsd! / prevDay.eurUsdYahoo) * 100 : null;
+
+    const diffRonToUsd = prevDay && prevRonToUsd100 !== null ? ronToUsd100 - prevRonToUsd100 : null;
+    const pctRonToUsd = prevDay && prevRonToUsd100 && prevRonToUsd100 > 0 ? (diffRonToUsd! / prevRonToUsd100) * 100 : null;
+
+    const formatDiff = (val: number, decimals: number = 4) => {
+      const sign = val > 0 ? '+' : '';
+      return `${sign}${val.toFixed(decimals)}`;
     };
 
-    const payload = {
+    const formatPct = (val: number) => {
+      const sign = val > 0 ? '+' : '';
+      return `${sign}${val.toFixed(2)}%`;
+    };
+
+    const getIndicator = (val: number) => {
+      if (Math.abs(val) < 0.00001) return '⚪';
+      return val > 0 ? '🟢' : '🔴';
+    };
+
+    let textSummary = `📊 **Raport Curs Valutar — ${rates.date}**\n\n`;
+
+    // EUR / RON
+    textSummary += `💶 **EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)} RON\`\n`;
+    if (prevDay && diffEurRon !== null && pctEurRon !== null) {
+      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
+    }
+    textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
+
+    // EUR / USD
+    textSummary += `💵 **EUR / USD (Yahoo Finance):** \`${rates.eurUsdYahoo.toFixed(4)} USD\`\n`;
+    if (prevDay && diffEurUsd !== null && pctEurUsd !== null) {
+      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffEurUsd, 4)} USD\` (\`${formatPct(pctEurUsd)}\`) ${getIndicator(diffEurUsd)}\n`;
+    }
+    textSummary += `• Față de media 30 zile (\`${avgEurUsd.toFixed(4)} USD\`): \`${formattedDevEurUsd}\` ${getIndicator(devEurUsd)}\n\n`;
+
+    // 100 RON in USD
+    textSummary += `🇷🇴 **100 RON în USD:** \`${ronToUsd100.toFixed(2)} $\`\n`;
+    if (prevDay && diffRonToUsd !== null && pctRonToUsd !== null) {
+      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffRonToUsd, 2)} $\` (\`${formatPct(pctRonToUsd)}\`) ${getIndicator(diffRonToUsd)}\n`;
+    }
+    textSummary += `• Față de media 30 zile (\`${avgRonToUsd.toFixed(2)} $\`): \`${formattedDevRonToUsd}\` ${getIndicator(devRonToUsd)}\n\n`;
+
+    // Luna precedenta
+    textSummary += `📅 **Minim / Maxim luna precedentă (${formattedMonth}):**\n`;
+    if (prevMonthStats) {
+      textSummary += `• **EUR / RON:** min \`${prevMonthStats.eurRonBnr.min.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}) │ max \`${prevMonthStats.eurRonBnr.max.value.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date})\n`;
+      textSummary += `• **EUR / USD:** min \`${prevMonthStats.eurUsdYahoo.min.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}) │ max \`${prevMonthStats.eurUsdYahoo.max.value.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date})\n`;
+    } else {
+      textSummary += `• Nu există date disponibile pentru luna precedentă.\n`;
+    }
+    textSummary += `\n🔗 <https://snotih.netlify.app/>`;
+
+    const payload: Record<string, any> = {
       username: 'Snotih Bot',
       content: textSummary,
-      embeds: [discordEmbed],
+      flags: 4, // Suppress any embeds in Discord
       success: true,
       timestamp: new Date().toISOString(),
       currentRate: {
@@ -219,6 +245,37 @@ app.post('/api/trigger-webhook', async (req, res) => {
         ronToUsd100: parseFloat(ronToUsd100.toFixed(2)),
         fetchedAt: rates.fetchedAt,
       },
+      previousDay: prevDay
+        ? {
+            date: prevDay.date,
+            eurRonBnr: prevDay.eurRonBnr,
+            eurUsdYahoo: prevDay.eurUsdYahoo,
+            ronToUsd100: prevRonToUsd100 !== null ? parseFloat(prevRonToUsd100.toFixed(2)) : null,
+          }
+        : null,
+      comparisonPreviousDay:
+        prevDay && diffEurRon !== null && pctEurRon !== null && diffEurUsd !== null && pctEurUsd !== null && diffRonToUsd !== null && pctRonToUsd !== null
+          ? {
+              eurRonBnr: {
+                diff: parseFloat(diffEurRon.toFixed(4)),
+                deviationPercent: parseFloat(pctEurRon.toFixed(4)),
+                formattedDiff: formatDiff(diffEurRon, 4),
+                formattedPercent: formatPct(pctEurRon),
+              },
+              eurUsdYahoo: {
+                diff: parseFloat(diffEurUsd.toFixed(4)),
+                deviationPercent: parseFloat(pctEurUsd.toFixed(4)),
+                formattedDiff: formatDiff(diffEurUsd, 4),
+                formattedPercent: formatPct(pctEurUsd),
+              },
+              ronToUsd100: {
+                diff: parseFloat(diffRonToUsd.toFixed(2)),
+                deviationPercent: parseFloat(pctRonToUsd.toFixed(4)),
+                formattedDiff: formatDiff(diffRonToUsd, 2),
+                formattedPercent: formatPct(pctRonToUsd),
+              },
+            }
+          : null,
       averagesLast30Days: {
         eurRonBnr: {
           average: parseFloat(avgEurRon.toFixed(4)),
@@ -236,12 +293,14 @@ app.post('/api/trigger-webhook', async (req, res) => {
           formattedDeviation: formattedDevRonToUsd,
         },
       },
-      previousMonth: prevMonthStats ? {
-        month: prevMonthStats.month,
-        formattedMonth,
-        eurRonBnr: prevMonthStats.eurRonBnr,
-        eurUsdYahoo: prevMonthStats.eurUsdYahoo,
-      } : null,
+      previousMonth: prevMonthStats
+        ? {
+            month: prevMonthStats.month,
+            formattedMonth,
+            eurRonBnr: prevMonthStats.eurRonBnr,
+            eurUsdYahoo: prevMonthStats.eurUsdYahoo,
+          }
+        : null,
       textSummary,
     };
 
