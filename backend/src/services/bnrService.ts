@@ -14,7 +14,7 @@ const HTTP_HEADERS = {
  * Descarca XML-ul oficial BNR si extrage cursul EUR/RON.
  * URL direct: https://curs.bnr.ro/nbrfxrates.xml
  */
-export async function fetchBnrEurRon(): Promise<number> {
+export async function fetchBnrEurRonDetails(): Promise<{ rate: number; date: string }> {
   let responseData: string;
 
   try {
@@ -47,6 +47,7 @@ export async function fetchBnrEurRon(): Promise<number> {
       throw new Error('Structura XML BNR neasteptata: lipseste Body.Cube');
     }
 
+    const bnrDate = (cube?.['@_date'] as string) || new Date().toISOString().split('T')[0];
     const rates = Array.isArray(cube.Rate) ? cube.Rate : [cube.Rate];
     const eurRate = rates.find((r: any) => r?.['@_currency'] === 'EUR');
 
@@ -61,24 +62,33 @@ export async function fetchBnrEurRon(): Promise<number> {
       throw new Error('Valoarea cursului EUR nu a putut fi interpretata ca numar');
     }
 
-    return value;
+    return { rate: value, date: bnrDate };
   } catch (err: any) {
     console.warn('[BNR] Preluarea BNR EUR/RON a esuat din sursele HTTP:', err?.message || err);
     const cachedRates = readRates();
     if (cachedRates?.eurRonBnr) {
       console.warn('[BNR] Se foloseste valoarea EUR/RON din cache-ul local:', cachedRates.eurRonBnr);
-      return cachedRates.eurRonBnr;
+      return { rate: cachedRates.eurRonBnr, date: cachedRates.date };
     }
     const history = readHistory();
     if (history.length > 0) {
       const lastEntry = history[history.length - 1];
       if (lastEntry.eurRonBnr) {
         console.warn('[BNR] Se foloseste valoarea EUR/RON din ultimul istoric:', lastEntry.eurRonBnr);
-        return lastEntry.eurRonBnr;
+        return { rate: lastEntry.eurRonBnr, date: lastEntry.date };
       }
     }
     throw err;
   }
+}
+
+/**
+ * Descarca XML-ul oficial BNR si extrage cursul EUR/RON.
+ * URL direct: https://curs.bnr.ro/nbrfxrates.xml
+ */
+export async function fetchBnrEurRon(): Promise<number> {
+  const details = await fetchBnrEurRonDetails();
+  return details.rate;
 }
 
 /**

@@ -14,7 +14,15 @@ export async function generateRatesChartBuffer(
       return null;
     }
 
-    const chartHistory = history.slice(-daysCount);
+    const isWeekend = (dateStr: string): boolean => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      const day = date.getUTCDay();
+      return day === 0 || day === 6;
+    };
+
+    const workdaysHistory = history.filter((h) => !isWeekend(h.date));
+    const chartHistory = (workdaysHistory.length >= 2 ? workdaysHistory : history).slice(-daysCount);
     if (chartHistory.length < 2) {
       return null;
     }

@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 
-import { fetchBnrEurRon } from './services/bnrService';
+import { fetchBnrEurRon, fetchBnrEurRonDetails } from './services/bnrService';
 import { fetchEurUsd } from './services/exchangeService';
 import {
   readRates,
@@ -159,18 +159,73 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
     const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
 
-    // Gasim intrarea pentru ziua anterioara
-    const sortedHistory = [...history].sort((a, b) => a.date.localeCompare(b.date));
-    const priorEntries = sortedHistory.filter((h) => h.date < rates.date);
+    // Helper: verifica daca o data este in weekend (Sambata sau Duminica)
+    const isWeekend = (dateStr: string): boolean => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      const day = date.getUTCDay();
+      return day === 0 || day === 6;
+    };
+
+    // Helper: obtine ziua saptamanii (0 = Duminica, 1 = Luni, ..., 5 = Vineri, 6 = Sambata)
+    const getDayOfWeek = (dateStr: string): number => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      return date.getUTCDay();
+    };
+
+    // Filtram istoricul pentru a pastra doar zile lucratoare (excludem weekend-urile,
+    // deoarece BNR nu publica actualizari in weekend).
+    const sortedHistory = [...history]
+      .filter((h) => !isWeekend(h.date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Daca rates.date pica in weekend, cursul BNR de referinta este cel de vineri
+    let effectiveCurrentDate = rates.date;
+    if (isWeekend(effectiveCurrentDate)) {
+      const latestWorkday = sortedHistory.filter((h) => h.date <= rates.date).pop();
+      if (latestWorkday) {
+        effectiveCurrentDate = latestWorkday.date;
+      }
+    }
+
+    // Cautam ziua de tranzactionare precedenta (strict mai mica decat data efectiva curenta).
+    // In weekend nu exista actualizare, deci luni se va raporta la ziua precedenta ca fiind vineri!
+    const priorEntries = sortedHistory.filter((h) => h.date < effectiveCurrentDate);
     let prevDay: ExchangeRates | null = null;
     if (priorEntries.length > 0) {
       prevDay = priorEntries[priorEntries.length - 1];
     } else if (sortedHistory.length > 1) {
-      const currentIndex = sortedHistory.findIndex((h) => h.date === rates.date);
+      const currentIndex = sortedHistory.findIndex((h) => h.date === effectiveCurrentDate);
       if (currentIndex > 0) {
         prevDay = sortedHistory[currentIndex - 1];
       }
     }
+
+    // Generam eticheta pentru comparatie (ex: "Față de vineri (2026-10-16)" pentru luni, "Față de ieri (...)" pentru zile consecutive)
+    const getPrevDayLabel = (prevDateStr: string): string => {
+      const curDayOfWeek = getDayOfWeek(effectiveCurrentDate);
+      const prevDayOfWeek = getDayOfWeek(prevDateStr);
+
+      if (curDayOfWeek === 1 && prevDayOfWeek === 5) {
+        return `Față de vineri (${prevDateStr})`;
+      }
+
+      const [curY, curM, curD] = effectiveCurrentDate.split('-').map(Number);
+      const [pY, pM, pD] = prevDateStr.split('-').map(Number);
+      const diffDays = Math.round(
+        (Date.UTC(curY, curM - 1, curD) - Date.UTC(pY, pM - 1, pD)) / (1000 * 60 * 60 * 24)
+      );
+
+      if (diffDays === 1) {
+        return `Față de ieri (${prevDateStr})`;
+      }
+
+      const DAY_NAMES = ['duminică', 'luni', 'marți', 'miercuri', 'joi', 'vineri', 'sâmbătă'];
+      return `Față de ${DAY_NAMES[prevDayOfWeek] || 'ziua precedentă'} (${prevDateStr})`;
+    };
+
+    const prevDayLabel = prevDay ? getPrevDayLabel(prevDay.date) : 'Față de ziua precedentă';
 
     const prevRonToUsd100 = prevDay && prevDay.eurRonBnr > 0
       ? (100 * prevDay.eurUsdYahoo) / prevDay.eurRonBnr
@@ -205,21 +260,21 @@ app.post('/api/trigger-webhook', async (req, res) => {
     // EUR / RON
     textSummary += `💶 **EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)} RON\`\n`;
     if (prevDay && diffEurRon !== null && pctEurRon !== null) {
-      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
+      textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
     }
     textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
 
     // EUR / USD
     textSummary += `💵 **EUR / USD (Yahoo Finance):** \`${rates.eurUsdYahoo.toFixed(4)} USD\`\n`;
     if (prevDay && diffEurUsd !== null && pctEurUsd !== null) {
-      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffEurUsd, 4)} USD\` (\`${formatPct(pctEurUsd)}\`) ${getIndicator(diffEurUsd)}\n`;
+      textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurUsd, 4)} USD\` (\`${formatPct(pctEurUsd)}\`) ${getIndicator(diffEurUsd)}\n`;
     }
     textSummary += `• Față de media 30 zile (\`${avgEurUsd.toFixed(4)} USD\`): \`${formattedDevEurUsd}\` ${getIndicator(devEurUsd)}\n\n`;
 
     // 100 RON in USD
     textSummary += `🇷🇴 **100 RON în USD:** \`${ronToUsd100.toFixed(2)} $\`\n`;
     if (prevDay && diffRonToUsd !== null && pctRonToUsd !== null) {
-      textSummary += `• Față de ziua precedentă (${prevDay.date}): \`${formatDiff(diffRonToUsd, 2)} $\` (\`${formatPct(pctRonToUsd)}\`) ${getIndicator(diffRonToUsd)}\n`;
+      textSummary += `• ${prevDayLabel}: \`${formatDiff(diffRonToUsd, 2)} $\` (\`${formatPct(pctRonToUsd)}\`) ${getIndicator(diffRonToUsd)}\n`;
     }
     textSummary += `• Față de media 30 zile (\`${avgRonToUsd.toFixed(2)} $\`): \`${formattedDevRonToUsd}\` ${getIndicator(devRonToUsd)}\n\n`;
 
@@ -607,13 +662,18 @@ app.get('/api/backfill-10-years', async (req, res) => {
 
 
 export async function fetchAndSaveRates() {
-  const [eurRonBnr, eurUsdYahoo] = await Promise.all([
-    fetchBnrEurRon(),
+  const [bnrDetails, eurUsdYahoo] = await Promise.all([
+    fetchBnrEurRonDetails(),
     fetchEurUsd(),
   ]);
 
+  const eurRonBnr = bnrDetails.rate;
+  // BNR nu actualizeaza cursul in weekend, pastrandu-l pe cel de vineri.
+  // Folosim data oficiala furnizata de BNR pentru a evita crearea de intrari false de weekend in istoric.
+  const rateDate = bnrDetails.date || new Date().toISOString().split('T')[0];
+
   const newRates: ExchangeRates = {
-    date: new Date().toISOString().split('T')[0],
+    date: rateDate,
     eurRonBnr,
     eurUsdYahoo,
     fetchedAt: new Date().toISOString(),
