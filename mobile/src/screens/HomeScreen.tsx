@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { useHistory } from '../hooks/useHistory';
+import { useMarketPredictor } from '../hooks/useMarketPredictor';
 import MonthlyStatsList from '../components/MonthlyStatsList';
 import RateChart from '../components/RateChart';
+import PredictorCard from '../components/PredictorCard';
 import DropdownSelector, { DropdownOption } from '../components/DropdownSelector';
 import { HistoryEntry } from '../api/types';
 import buildInfo from '../constants/buildInfo.json';
@@ -70,6 +72,13 @@ export default function HomeScreen() {
   const { colors, isBlack } = useTheme();
   const { rates, isLoading, error, refresh } = useExchangeRates();
   const { history, monthlyStats, refresh: refreshHistory } = useHistory();
+  const {
+    prediction,
+    intradayAverage,
+    moneyMarket,
+    isLoading: isPredictorLoading,
+    refresh: refreshPredictor,
+  } = useMarketPredictor(rates?.date);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedInterval, setSelectedInterval] = useState<string>('1m');
 
@@ -77,9 +86,9 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refresh(), refreshHistory()]);
+    await Promise.all([refresh(), refreshHistory(), refreshPredictor()]);
     setRefreshing(false);
-  }, [refresh, refreshHistory]);
+  }, [refresh, refreshHistory, refreshPredictor]);
 
   const filteredHistory = filterHistory(history, selectedInterval);
   const chartHistory = downsampleData(filteredHistory, 80);
@@ -211,6 +220,14 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
+
+      {/* Predictor & Analiza Piata Interbancara */}
+      <PredictorCard
+        prediction={prediction}
+        intradayAverage={intradayAverage}
+        moneyMarket={moneyMarket}
+        isLoading={isPredictorLoading}
+      />
 
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Evoluție Grafice</Text>
       <DropdownSelector

@@ -29,6 +29,12 @@ import {
   resetRsiSymbols,
 } from './services/rsiStore';
 import { generateRatesChartBuffer } from './services/chartService';
+import {
+  generateBnrRatePrediction,
+  formatPredictorDiscordSection,
+} from './services/predictorService';
+import { computeRonEurIntradayAverage, getBucharestDateTime } from './services/intradayService';
+import { fetchMoneyMarketData } from './services/moneyMarketService';
 import { ExchangeRates, RsiCheckResponse } from './types';
 
 dotenv.config();
@@ -255,14 +261,36 @@ app.post('/api/trigger-webhook', async (req, res) => {
       return val > 0 ? '🟢' : '🔴';
     };
 
-    let textSummary = `📊 **Raport Curs Valutar — ${rates.date}**\n\n`;
+    const prevBnrRate = prevDay ? prevDay.eurRonBnr : rates.eurRonBnr;
+    const prevDateStr = prevDay ? prevDay.date : effectiveCurrentDate;
+
+    // Calculam datele de piata intraday, predictorul BNR 13:00 si piata monetara (ROBOR/IRCC)
+    const moneyMarket = await fetchMoneyMarketData();
+    const [predictor, intradayAvg] = await Promise.all([
+      generateBnrRatePrediction(effectiveCurrentDate, moneyMarket),
+      computeRonEurIntradayAverage(prevDateStr, effectiveCurrentDate, prevBnrRate),
+    ]);
+
+    const nowBucharest = getBucharestDateTime(new Date());
+    const isBeforeFixing = nowBucharest.hour < 13;
+
+    let textSummary = isBeforeFixing
+      ? `📊 **Raport Matinal Curs Valutar — ${nowBucharest.dateStr} (ora ${String(nowBucharest.hour).padStart(2, '0')}:${String(nowBucharest.minute).padStart(2, '0')})**\n\n`
+      : `📊 **Raport Curs Valutar — ${rates.date}**\n\n`;
 
     // EUR / RON
-    textSummary += `💶 **EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)} RON\`\n`;
+    if (isBeforeFixing) {
+      textSummary += `💶 **EUR / RON (BNR în vigoare):** \`${rates.eurRonBnr.toFixed(4)} RON\` *(ședința precedentă, valabil până la 13:00)*\n`;
+    } else {
+      textSummary += `💶 **EUR / RON (BNR):** \`${rates.eurRonBnr.toFixed(4)} RON\`\n`;
+    }
     if (prevDay && diffEurRon !== null && pctEurRon !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
     }
     textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
+
+    // Sesiune interbancara (13:00 ieri -> 09:00 azi), Predictor BNR 13:00 si Piata Monetara (ROBOR/IRCC)
+    textSummary += formatPredictorDiscordSection(predictor, intradayAvg, moneyMarket);
 
     // EUR / USD
     textSummary += `💵 **EUR / USD (Yahoo Finance):** \`${rates.eurUsdYahoo.toFixed(4)} USD\`\n`;
@@ -435,6 +463,9 @@ app.post('/api/trigger-webhook', async (req, res) => {
               : {}),
           }
         : null,
+      intradayAverage: intradayAvg,
+      predictor,
+      moneyMarket,
       textSummary,
     };
 
@@ -479,11 +510,131 @@ app.post('/api/trigger-webhook', async (req, res) => {
       message: 'OK',
       chartAttached,
       webhookStatus,
+      intradayAverage: intradayAvg,
+      predictor,
+      moneyMarket,
     });
   } catch (err: any) {
     console.error('Eroare in /api/trigger-webhook:', err.message || err);
     return res.status(500).json({
       error: 'WEBHOOK-ERROR',
+      details: err.message || String(err),
+    });
+  }
+});
+
+/**
+ * GET /api/prediction
+ * Returneaza predictia curenta pentru cursul BNR de la ora 13:00,
+ * pe baza variatiei EUR/PLN si EUR/HUF (09:00 - 11:30), EUR/USD overnight si ROBOR/IRCC.
+ */
+app.get('/api/prediction', async (req, res) => {
+  try {
+    const targetDate = (req.query.date as string) || undefined;
+    const prediction = await generateBnrRatePrediction(targetDate);
+    return res.json(prediction);
+  } catch (err: any) {
+    console.error('Eroare in /api/prediction:', err?.message || err);
+    return res.status(500).json({ error: 'PREDICTION_ERROR', details: err?.message || String(err) });
+  }
+});
+
+/**
+ * GET /api/intraday-average
+ * Returneaza media cursului RON / EUR intre ziua precedenta la 13:00 si ziua curenta la 09:00.
+ */
+app.get('/api/intraday-average', async (req, res) => {
+  try {
+    const rates = readRates();
+    const history = readHistory();
+    const sortedHistory = [...history].sort((a, b) => a.date.localeCompare(b.date));
+    const currentDate = (req.query.date as string) || rates?.date || new Date().toISOString().split('T')[0];
+    const priorWorkdays = sortedHistory.filter((h) => h.date < currentDate);
+    const prevDay = priorWorkdays.length > 0 ? priorWorkdays[priorWorkdays.length - 1] : null;
+    const prevDate = prevDay?.date || currentDate;
+    const prevRate = prevDay?.eurRonBnr || rates?.eurRonBnr || 4.9765;
+
+    const result = await computeRonEurIntradayAverage(prevDate, currentDate, prevRate);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Eroare in /api/intraday-average:', err?.message || err);
+    return res.status(500).json({ error: 'INTRADAY_AVERAGE_ERROR', details: err?.message || String(err) });
+  }
+});
+
+/**
+ * GET /api/money-market
+ * Returneaza cotele indicilor ROBOR (3M, 6M, 1M, O/N), IRCC si starea lichiditatii pietei monetare.
+ */
+app.get('/api/money-market', async (_req, res) => {
+  try {
+    const data = await fetchMoneyMarketData();
+    return res.json(data);
+  } catch (err: any) {
+    console.error('Eroare in /api/money-market:', err?.message || err);
+    return res.status(500).json({ error: 'MONEY_MARKET_ERROR', details: err?.message || String(err) });
+  }
+});
+
+/**
+ * POST /api/trigger-prediction-webhook
+ * Trimite o alerta pe Discord la ora ~11:35 cu predictia cursului BNR inainte de fixingul de la 13:00.
+ */
+app.post('/api/trigger-prediction-webhook', async (req, res) => {
+  const webhookUrl =
+    req.body?.webhookUrl ||
+    (req.query?.webhookUrl as string) ||
+    process.env.WEBHOOK_URL ||
+    process.env.DISCORD_WEBHOOK_URL;
+
+  if (!webhookUrl || typeof webhookUrl !== 'string') {
+    return res.status(400).json({
+      error: 'Campul "webhookUrl" este obligatoriu.',
+    });
+  }
+
+  try {
+    const rates = readRates();
+    const history = readHistory();
+    const sortedHistory = [...history].sort((a, b) => a.date.localeCompare(b.date));
+    const currentDate = rates?.date || new Date().toISOString().split('T')[0];
+    const priorWorkdays = sortedHistory.filter((h) => h.date < currentDate);
+    const prevDay = priorWorkdays.length > 0 ? priorWorkdays[priorWorkdays.length - 1] : null;
+    const prevDate = prevDay?.date || currentDate;
+    const prevRate = prevDay?.eurRonBnr || rates?.eurRonBnr || 4.9765;
+
+    const moneyMarket = await fetchMoneyMarketData();
+    const [predictor, intradayAvg] = await Promise.all([
+      generateBnrRatePrediction(currentDate, moneyMarket),
+      computeRonEurIntradayAverage(prevDate, currentDate, prevRate),
+    ]);
+
+    let content = `🔮 **Alertă Predictor Curs BNR 13:00 — ${currentDate}**\n\n`;
+    content += formatPredictorDiscordSection(predictor, intradayAvg, moneyMarket);
+    content += `🔗 <https://snotih.netlify.app/>`;
+
+    const headers = formatDiscordWebhookRequest();
+    const payload = {
+      username: 'Snotih Predictor Bot',
+      content,
+      flags: 4,
+    };
+
+    const response = await axios.post(webhookUrl, payload, {
+      headers,
+      timeout: 10000,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Notificare predictor trimisa cu succes pe Discord.',
+      webhookStatus: response.status,
+      predictor,
+    });
+  } catch (err: any) {
+    console.error('Eroare in /api/trigger-prediction-webhook:', err.message || err);
+    return res.status(500).json({
+      error: 'PREDICTION-WEBHOOK-ERROR',
       details: err.message || String(err),
     });
   }

@@ -110,8 +110,14 @@ Scaneaza codul QR cu aplicatia **Expo Go** de pe telefon pentru a testa rapid.
 | GET    | `/api/rsi/symbols`     | Returneaza configuratia curenta de simboluri (active, suprascrise, default) |
 | POST   | `/api/rsi/symbols`     | Suprascrie lista de simboluri din frontend |
 | POST   | `/api/rsi/symbols/reset` | Reseteaza lista de simboluri la valorile default din `.env` |
+| GET    | `/api/prediction`      | Returneaza predictia cursului BNR de la 13:00 (EUR/PLN, EUR/HUF 09:00-11:30, EUR/USD overnight, ROBOR/IRCC) |
+| GET    | `/api/intraday-average` | Returneaza media sesiunii interbancare RON / EUR (13:00 precedent -> 09:00 azi) |
+| GET    | `/api/money-market`    | Returneaza ROBOR (3M, 6M, 1M, O/N), IRCC si starea lichiditatii monetare BNR |
+| POST   | `/api/trigger-prediction-webhook` | Trimite alerta matinala pe Discord cu predictia BNR inainte de fixingul de la 13:00 |
 
-Datele sunt persistate in `backend/data/` in fisiere JSON: `rates.json`, `history.json`, `tokens.json`, `monthlyStats.json` si `rsiSymbols.json`.
+> Pentru detalii complete despre algoritmul de predicție, calculul mediei interbancare RON/EUR și relevanța la ora 10:12 AM, consultă [Documentație Predictor BNR & Intraday](docs/bnr_predictor_and_intraday.md).
+
+Datele sunt persistate in `backend/data/` in fisiere JSON: `rates.json`, `history.json`, `tokens.json`, `monthlyStats.json`, `rsiSymbols.json` si `moneyMarket.json`.
 
 ## 7. Backfill automat pentru luna curenta
 

@@ -5,6 +5,9 @@ import {
   RsiCheckResponse,
   RsiStatusResponse,
   RsiSymbolsConfig,
+  BnrPredictorResult,
+  IntradayAverageResult,
+  MoneyMarketData,
 } from './types';
 
 // Inlocuieste cu URL-ul real oferit de Render dupa deployment.
@@ -128,4 +131,45 @@ export async function triggerRsiCheck(webhookUrl?: string): Promise<RsiCheckResp
   }
 
   return (await response.json()) as RsiCheckResponse;
+}
+
+/**
+ * Preia predictia curenta pentru cursul BNR de la ora 13:00.
+ */
+export async function fetchPrediction(date?: string): Promise<BnrPredictorResult> {
+  const url = date ? `${API_BASE_URL}/api/prediction?date=${encodeURIComponent(date)}` : `${API_BASE_URL}/api/prediction`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea predictiei (status ${response.status})`);
+  }
+
+  return (await response.json()) as BnrPredictorResult;
+}
+
+/**
+ * Preia media sesiunii interbancare RON / EUR (13:00 precedent -> 09:00 azi).
+ */
+export async function fetchIntradayAverage(date?: string): Promise<IntradayAverageResult> {
+  const url = date ? `${API_BASE_URL}/api/intraday-average?date=${encodeURIComponent(date)}` : `${API_BASE_URL}/api/intraday-average`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea mediei intraday (status ${response.status})`);
+  }
+
+  return (await response.json()) as IntradayAverageResult;
+}
+
+/**
+ * Preia datele din piata monetara (ROBOR 3M, 6M, IRCC, lichiditate).
+ */
+export async function fetchMoneyMarket(): Promise<MoneyMarketData> {
+  const response = await fetch(`${API_BASE_URL}/api/money-market`);
+
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea datelor pietei monetare (status ${response.status})`);
+  }
+
+  return (await response.json()) as MoneyMarketData;
 }

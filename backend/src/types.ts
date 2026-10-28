@@ -64,3 +64,80 @@ export interface RsiCheckResponse {
   discordChannel: string;
   discordDetails?: string;
 }
+
+export interface IntradayPoint {
+  timestamp: number;
+  datetimeBucharest: string;
+  dateStr: string;
+  hour: number;
+  minute: number;
+  close: number;
+}
+
+export interface IntradayAverageResult {
+  windowStart: string;
+  windowEnd: string;
+  avgEurRon: number;
+  avgRonEur: number;
+  minEurRon: number;
+  maxEurRon: number;
+  sampleCount: number;
+  diffFromPrevBnr?: number;
+  pctFromPrevBnr?: number;
+  isAvailable: boolean;
+  note?: string;
+}
+
+export interface MoneyMarketData {
+  date: string;
+  robor3M: number;
+  robor6M?: number;
+  robor1M?: number;
+  roborON?: number;
+  robor3MVariation?: number;
+  ircc: number;
+  irccPeriod?: string;
+  irccDaily?: number;
+  policyRate?: number;
+  depositFacilityRate?: number;
+  liquidityCondition: string;
+  liquidityDetails?: string;
+  isAvailable: boolean;
+  lastUpdated?: string;
+}
+
+export interface PredictorSignal {
+  pair: string;
+  label: string;
+  startValue: number;
+  endValue: number;
+  percentChange: number;
+  formattedChange: string;
+  direction: 'UP' | 'DOWN' | 'FLAT';
+  impactOnEurRon: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface BnrPredictorResult {
+  timestamp: string;
+  targetDate: string;
+  fixingTime: string;
+  isEarlyMorning?: boolean;
+  timeWindowDescription?: string;
+  prediction: 'INCREASE' | 'DECREASE' | 'NEUTRAL';
+  predictionLabel: string;
+  directionIcon: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  confidencePercent: number;
+  compositeScore: number;
+  signals: {
+    eurPln: PredictorSignal;
+    eurHuf: PredictorSignal;
+    eurUsdOvernight: PredictorSignal;
+    moneyMarket?: MoneyMarketData;
+    intradayAverage?: IntradayAverageResult;
+  };
+  summary: string;
+  reasoning: string[];
+}
