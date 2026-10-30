@@ -119,6 +119,19 @@ export interface PredictorSignal {
   endTime?: string;
 }
 
+export interface RonEurDynamicsSignal {
+  currentRonEur: number;
+  prevRonEur: number;
+  percentChange: number;
+  formattedChange: string;
+  avg30DaysRonEur?: number;
+  devFrom30DaysPercent?: number;
+  psychologicalThreshold: number; // 0.2000 EUR (5.0000 lei)
+  distanceToThresholdPercent: number;
+  defensePressure: 'HIGH' | 'MODERATE' | 'LOW';
+  defenseDescription: string;
+}
+
 export interface BnrPredictorResult {
   timestamp: string;
   targetDate: string;
@@ -135,9 +148,11 @@ export interface BnrPredictorResult {
     eurPln: PredictorSignal;
     eurHuf: PredictorSignal;
     eurUsdOvernight: PredictorSignal;
+    ronEurDynamics?: RonEurDynamicsSignal;
     moneyMarket?: MoneyMarketData;
     intradayAverage?: IntradayAverageResult;
   };
   summary: string;
   reasoning: string[];
 }
+

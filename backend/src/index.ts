@@ -61,7 +61,11 @@ app.get('/api/rates', (_req, res) => {
     return res.status(404).json({ error: 'Nu exista inca date despre curs. Asteapta primul fetch.' });
   }
 
-  return res.json(rates);
+  const ronEur = rates.eurRonBnr > 0 ? parseFloat((1 / rates.eurRonBnr).toFixed(6)) : 0;
+  return res.json({
+    ...rates,
+    ronEur,
+  });
 });
 
 /**
@@ -140,6 +144,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const formattedMonth = `${MONTH_NAMES[prevMonthVal - 1] ?? prevMonthVal} ${prevYear}`;
 
     const ronToUsd100 = rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr) : 0;
+    const ronEur = rates.eurRonBnr > 0 ? (1 / rates.eurRonBnr) : 0;
 
     // Calculam mediile pe ultimele 30 de zile si abaterile
     const history = readHistory();
@@ -147,6 +152,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const count = last30.length;
 
     const sumEurRon = last30.reduce((sum, h) => sum + h.eurRonBnr, 0);
+    const sumRonEur = last30.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0);
     const sumEurUsd = last30.reduce((sum, h) => sum + h.eurUsdYahoo, 0);
     const sumRonToUsd = last30.reduce((sum, h) => {
       const conv = h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0;
@@ -154,14 +160,17 @@ app.post('/api/trigger-webhook', async (req, res) => {
     }, 0);
 
     const avgEurRon = count > 0 ? sumEurRon / count : 0;
+    const avgRonEur = count > 0 ? sumRonEur / count : 0;
     const avgEurUsd = count > 0 ? sumEurUsd / count : 0;
     const avgRonToUsd = count > 0 ? sumRonToUsd / count : 0;
 
     const devEurRon = avgEurRon > 0 ? ((rates.eurRonBnr - avgEurRon) / avgEurRon) * 100 : 0;
+    const devRonEur = avgRonEur > 0 ? ((ronEur - avgRonEur) / avgRonEur) * 100 : 0;
     const devEurUsd = avgEurUsd > 0 ? ((rates.eurUsdYahoo - avgEurUsd) / avgEurUsd) * 100 : 0;
     const devRonToUsd = avgRonToUsd > 0 ? ((ronToUsd100 - avgRonToUsd) / avgRonToUsd) * 100 : 0;
 
     const formattedDevEurRon = (devEurRon >= 0 ? '+' : '') + devEurRon.toFixed(2) + '%';
+    const formattedDevRonEur = (devRonEur >= 0 ? '+' : '') + devRonEur.toFixed(2) + '%';
     const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
     const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
 
@@ -240,6 +249,10 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const diffEurRon = prevDay ? rates.eurRonBnr - prevDay.eurRonBnr : null;
     const pctEurRon = prevDay && prevDay.eurRonBnr > 0 ? (diffEurRon! / prevDay.eurRonBnr) * 100 : null;
 
+    const prevRonEur = prevDay && prevDay.eurRonBnr > 0 ? 1 / prevDay.eurRonBnr : null;
+    const diffRonEur = prevRonEur !== null ? ronEur - prevRonEur : null;
+    const pctRonEur = prevRonEur !== null && prevRonEur > 0 ? (diffRonEur! / prevRonEur) * 100 : null;
+
     const diffEurUsd = prevDay ? rates.eurUsdYahoo - prevDay.eurUsdYahoo : null;
     const pctEurUsd = prevDay && prevDay.eurUsdYahoo > 0 ? (diffEurUsd! / prevDay.eurUsdYahoo) * 100 : null;
 
@@ -288,6 +301,17 @@ app.post('/api/trigger-webhook', async (req, res) => {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
     }
     textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
+
+    // RON / EUR
+    if (isBeforeFixing) {
+      textSummary += `🇷🇴 **RON / EUR (invers BNR în vigoare):** \`${ronEur.toFixed(4)} EUR\` *(100 RON = ${(ronEur * 100).toFixed(2)} €)*\n`;
+    } else {
+      textSummary += `🇷🇴 **RON / EUR (invers BNR):** \`${ronEur.toFixed(4)} EUR\` *(100 RON = ${(ronEur * 100).toFixed(2)} €)*\n`;
+    }
+    if (prevDay && diffRonEur !== null && pctRonEur !== null) {
+      textSummary += `• ${prevDayLabel}: \`${formatDiff(diffRonEur, 5)} EUR\` (\`${formatPct(pctRonEur)}\`) ${getIndicator(diffRonEur)}\n`;
+    }
+    textSummary += `• Față de media 30 zile (\`${avgRonEur.toFixed(4)} EUR\`): \`${formattedDevRonEur}\` ${getIndicator(devRonEur)}\n\n`;
 
     // Sesiune interbancara (13:00 ieri -> 09:00 azi), Predictor BNR 13:00 si Piata Monetara (ROBOR/IRCC)
     textSummary += formatPredictorDiscordSection(predictor, intradayAvg, moneyMarket);
@@ -357,6 +381,13 @@ app.post('/api/trigger-webhook', async (req, res) => {
       pctMaxEurUsd = maxEurUsd > 0 ? ((rates.eurUsdYahoo - maxEurUsd) / maxEurUsd) * 100 : 0;
 
       textSummary += `• **EUR / RON:** min \`${minEurRon.toFixed(4)}\` (${prevMonthStats.eurRonBnr.min.date}, \`${formatPct(pctMinEurRon)}\`) │ max \`${maxEurRon.toFixed(4)}\` (${prevMonthStats.eurRonBnr.max.date}, \`${formatPct(pctMaxEurRon)}\`)\n`;
+      const minRonEur = maxEurRon > 0 ? 1 / maxEurRon : 0;
+      const minRonEurDate = prevMonthStats.eurRonBnr.max.date;
+      const maxRonEur = minEurRon > 0 ? 1 / minEurRon : 0;
+      const maxRonEurDate = prevMonthStats.eurRonBnr.min.date;
+      const pctMinRonEur = minRonEur > 0 ? ((ronEur - minRonEur) / minRonEur) * 100 : 0;
+      const pctMaxRonEur = maxRonEur > 0 ? ((ronEur - maxRonEur) / maxRonEur) * 100 : 0;
+      textSummary += `• **RON / EUR:** min \`${minRonEur.toFixed(4)}\` (${minRonEurDate}, \`${formatPct(pctMinRonEur)}\`) │ max \`${maxRonEur.toFixed(4)}\` (${maxRonEurDate}, \`${formatPct(pctMaxRonEur)}\`)\n`;
       textSummary += `• **EUR / USD:** min \`${minEurUsd.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.min.date}, \`${formatPct(pctMinEurUsd)}\`) │ max \`${maxEurUsd.toFixed(4)}\` (${prevMonthStats.eurUsdYahoo.max.date}, \`${formatPct(pctMaxEurUsd)}\`)\n`;
 
       if (prevMonthRonToUsdStats) {
@@ -380,6 +411,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
       currentRate: {
         date: rates.date,
         eurRonBnr: rates.eurRonBnr,
+        ronEur: parseFloat(ronEur.toFixed(5)),
         eurUsdYahoo: rates.eurUsdYahoo,
         ronToUsd100: parseFloat(ronToUsd100.toFixed(2)),
         fetchedAt: rates.fetchedAt,
@@ -388,6 +420,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
         ? {
             date: prevDay.date,
             eurRonBnr: prevDay.eurRonBnr,
+            ronEur: prevRonEur !== null ? parseFloat(prevRonEur.toFixed(5)) : null,
             eurUsdYahoo: prevDay.eurUsdYahoo,
             ronToUsd100: prevRonToUsd100 !== null ? parseFloat(prevRonToUsd100.toFixed(2)) : null,
           }
@@ -400,6 +433,12 @@ app.post('/api/trigger-webhook', async (req, res) => {
                 deviationPercent: parseFloat(pctEurRon.toFixed(4)),
                 formattedDiff: formatDiff(diffEurRon, 4),
                 formattedPercent: formatPct(pctEurRon),
+              },
+              ronEur: {
+                diff: diffRonEur !== null ? parseFloat(diffRonEur.toFixed(5)) : 0,
+                deviationPercent: pctRonEur !== null ? parseFloat(pctRonEur.toFixed(4)) : 0,
+                formattedDiff: diffRonEur !== null ? formatDiff(diffRonEur, 5) : '+0.00000',
+                formattedPercent: pctRonEur !== null ? formatPct(pctRonEur) : '+0.00%',
               },
               eurUsdYahoo: {
                 diff: parseFloat(diffEurUsd.toFixed(4)),
@@ -420,6 +459,11 @@ app.post('/api/trigger-webhook', async (req, res) => {
           average: parseFloat(avgEurRon.toFixed(4)),
           deviationPercent: parseFloat(devEurRon.toFixed(4)),
           formattedDeviation: formattedDevEurRon,
+        },
+        ronEur: {
+          average: parseFloat(avgRonEur.toFixed(5)),
+          deviationPercent: parseFloat(devRonEur.toFixed(4)),
+          formattedDeviation: formattedDevRonEur,
         },
         eurUsdYahoo: {
           average: parseFloat(avgEurUsd.toFixed(4)),

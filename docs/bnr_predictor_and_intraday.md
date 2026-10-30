@@ -30,24 +30,37 @@ Banca Națională a României (BNR) publică zilnic în jurul orei **13:00 (EET/
 Predictorul agregă trei semnale fundamentale de piață ponderate, ajustate ulterior printr-un factor de volatilitate/lichiditate derivat din piața monetară (ROBOR/IRCC):
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             SCORE DE PREDICTOR (%)                               │
-│                                                                                  │
-│   Score = [ 0.60 × CEE_Change + 0.25 × EURUSD_Change + 0.15 × Drift_RON ]        │
-│                                                                                  │
-│   Score_Final = Score × Liquidity_Damping_Factor                                 │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                SCORE DE PREDICTOR (%)                                  │
+│                                                                                        │
+│   Score = [ 0.50 × CEE + 0.20 × EURUSD + 0.15 × Drift_EURRON + 0.15 × Dynamic_RONEUR ] │
+│                                                                                        │
+│   Score_Final = Score × Liquidity_Damping × Psychological_Defense_Damping             │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.1. Ponderile Factorilor
 
 | Indicator | Pondere | Fereastră Temporală | Justificare Economică |
 | :--- | :---: | :---: | :--- |
-| **Monede CEE (EUR/PLN & EUR/HUF)** | **60%** | 09:00 → 11:30 (sau ora curentă, ex. 10:12) | **Corelație regională puternică**: Zlotul polonez (PLN) și forintul maghiar (HUF) sunt cele mai lichide monede emergente din Europa Centrală și de Est (CEE). Fluxurile de capital instituțional tratează adesea regiunea CEE ca un bloc agregat. Deprecierea PLN și HUF față de EUR în orele dimineții semnalează ieșiri de capital din regiune, generând o presiune directă de depreciere și asupra leului (EUR/RON crește). |
-| **EUR/USD Overnight** | **25%** | Închidere sesiune precedentă (22:00) → 09:00 | **Sentimentul global de risc (Risk-On / Risk-Off)**: Dolarul american este activul de refugiu global. O scădere peste noapte a perechii EUR/USD (aprecierea USD) indică o aversiune globală la risc, ceea ce determină retrageri din monedele emergente precum leul. |
+| **Monede CEE (EUR/PLN & EUR/HUF)** | **50%** | 09:00 → 11:30 (sau ora curentă, ex. 10:12) | **Corelație regională puternică**: Zlotul polonez (PLN) și forintul maghiar (HUF) sunt cele mai lichide monede emergente din Europa Centrală și de Est (CEE). Fluxurile de capital instituțional tratează adesea regiunea CEE ca un bloc agregat. Deprecierea PLN și HUF față de EUR în orele dimineții semnalează ieșiri de capital din regiune, generând o presiune directă de depreciere și asupra leului (EUR/RON crește). |
+| **EUR/USD Overnight** | **20%** | Închidere sesiune precedentă (22:00) → 09:00 | **Sentimentul global de risc (Risk-On / Risk-Off)**: Dolarul american este activul de refugiu global. O scădere peste noapte a perechii EUR/USD (aprecierea USD) indică o aversiune globală la risc, ceea ce determină retrageri din monedele emergente precum leul. |
 | **EUR/RON Intraday Drift** | **15%** | 09:00 → Ora curentă vs. Ultimul fixing BNR | **Tensiunea interbancară locală spot**: Compară cotația spot curentă de pe piața interbancară cu ultimul fixing oficial al BNR. O abatere pozitivă arată că băncile cotează deja la niveluri mai mari decât fixingul anterior. |
+| **Dinamica RON/EUR & Prag Psihologic** | **15%** | Sesiune curentă vs. fixing anterior & media 30 zile | **Puterea de cumpărare a leului și apărarea pragului psihologic**: Măsoară variația leului în raport cu euro ($1 / \text{curs}$) și distanța până la nivelul critic de **0.2000 EUR/leu** (echivalentul pragului de **5.0000 lei/EUR**). BNR apără asimetric acest prag prin intervenții valutare. |
 
-### 2.2. Influența Pieței Monetare și a Lichidității (ROBOR / IRCC)
+### 2.2. Este Cotația RON / EUR Utilă în Previzionare?
+
+**Da, are o valoare predictivă esențială dacă este integrată din perspectivă asimetrică și psihologică:**
+
+1. **La nivel pur static**: Din punct de vedere matematic izolat, $\text{RON/EUR} = \frac{1}{\text{EUR/RON}}$. O cotație instantanee inversă are aceeași informație brută, scalată neliniar ($1/x$).
+2. **La nivel dinamic și comportamental de bancă centrală (Utilitatea Reală)**:
+   - **Apărarea Pragului Psihologic de 0.2000 EUR (5.0000 lei)**: În România, regimul valutar este de *flotare controlată* (managed float). Nivelul de 5.0000 lei/EUR corespunde exact valorii de **0.2000 EUR pentru 1 leu** (sau 20.00 € pentru 100 lei). Dacă cotația RON/EUR coboară sub 0.2008 EUR (adică EUR/RON urcă spre 4.9750 - 4.9800), probabilitatea intervenției BNR pentru limitarea deprecierii crește dramatic.
+   - **Funcția de Reacție Asimetrică a BNR**:
+     - Când piețele regionale împing leul spre depreciere (RON/EUR scade spre 0.2000), BNR intervine activ (vinde euro/absoarbe lei), aplicând un **factor de amortizare (*damping factor*) de până la 30%** asupra creșterii preconizate la fixing.
+     - Când piețele regionale favorizează aprecierea leului (RON/EUR crește, depărtându-se de 0.2000), BNR nu restricționează mișcarea, permițând leului să câștige teren.
+   - **Mean-Reversion față de media mobilă pe 30 de zile**: Abaterea puterii de cumpărare a leului față de media lunară a RON/EUR oferă un semnal de rezistență la fixing, prevenind alarmele false de depreciere abruptă.
+
+### 2.3. Influența Pieței Monetare și a Lichidității (ROBOR / IRCC)
 
 Banca Națională a României operează un regim de flotare controlată (*managed float*). În cadrul acestui regim, condițiile de lichiditate din sistemul bancar influențează capacitatea băncilor de a lua poziții speculative pe deprecierea leului:
 
@@ -121,42 +134,44 @@ Notificarea Discord păstrează **toate informațiile anterioare**, la care se a
 
 Cursuri oficiale în vigoare:
 💶 EUR/RON: 4.9765 lei (în vigoare din ședința anterioară)
+• Față de ieri: +0.0012 lei (+0.02%) 🔴
+• Față de media 30 zile: +0.0085 lei (+0.17%) 🔴
+
+🇷🇴 RON/EUR (invers BNR în vigoare): 0.2009 EUR (100 RON = 20.09 €)
+• Față de ieri: -0.00005 EUR (-0.02%) 🔴
+• Față de media 30 zile: -0.00034 EUR (-0.17%) 🔴
+
 💵 EUR/USD: 1.0842 (în vigoare din ședința anterioară)
-
-📈 Variație față de ziua precedentă:
-EUR/RON: +0.0012 lei (+0.02%)
-EUR/USD: -0.0020 (-0.18%)
-
-📊 Trend pe ultimele 30 de zile:
-EUR/RON: +0.0085 lei (+0.17%)
-EUR/USD: -0.0150 (-1.37%)
+• Față de ieri: -0.0020 (-0.18%) 🔴
+• Față de media 30 zile: -0.0150 (-1.37%) 🔴
 
 📅 Variație față de luna trecută:
-Minim: 4.9720 lei | Maxim: 4.9785 lei
+• EUR/RON: min 4.9720 lei | max 4.9785 lei
+• RON/EUR: min 0.2008 EUR | max 0.2011 EUR
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔮 PROGNOZĂ FIXING BNR 13:00
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Direcție estimată: 🔼 Creștere probabilă
-• Grad de încredere: 78%
-• Semnal CEE (09:00 → 10:10): EUR/PLN: +0.14%, EUR/HUF: +0.22%
-• EUR/USD Overnight: -0.18%
+• Tendință anticipată: 🔼 Creștere probabilă (Încredere: 78%)
+• EUR / PLN (09:00 → 10:10): +0.14% ↗️
+• EUR / HUF (09:00 → 10:10): +0.22% ↗️
+• EUR / USD Overnight: -0.18% ↘️
+• Dinamică RON / EUR: 1 RON = 0.2009 EUR (-0.02%) │ Prag 0.2000 EUR: +0.45% 🟢
 • Factor monetar: Excedent lichiditate (ROBOR 3M: 5.58%)
 • Notă: Presiune moderată de depreciere în regiune; BNR poate tempera variația.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 MEDIE INTERBANCARĂ RON / EUR (13:00 → 09:00)
+⏱️ SESIUNE INTERBANCARĂ (13:00 ieri → 09:00 azi)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Curs mediu EUR/RON: 4.9768 lei
-• Curs mediu RON/EUR: 0.2009 EUR/leu
-• Interval sesiune: Min 4.9750 lei — Max 4.9782 lei (24 lumânări)
+• Media RON / EUR: 4.9768 RON (1 RON = 0.2009 EUR)
+• Față de BNR anterior: +0.0003 RON (+0.01%) 🔴 [24 cotații]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏦 PIAȚA MONETARĂ & LICHIDITATE BNR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• ROBOR 3M: 5.58% | ROBOR 6M: 5.68%
-• ROBOR O/N: 5.42% | IRCC: 5.99%
-• Stare piață: Excedent de lichiditate
+• ROBOR 3M: 5.58% (+0.00%) │ ROBOR 6M: 5.68%
+• IRCC (trimestrial): 5.99% (T3 2026)
+• Lichiditate monetară: Excedent de lichiditate
 
 [Fișier atașat: chart.png cu graficul evoluției pe 30 de zile]
 ```

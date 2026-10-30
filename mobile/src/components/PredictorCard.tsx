@@ -194,6 +194,25 @@ export default function PredictorCard({
                 {prediction.signals.eurUsdOvernight.formattedChange}
               </Text>
             </View>
+
+            {prediction.signals.ronEurDynamics && (
+              <View style={[styles.signalChip, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.signalLabel, { color: colors.textMuted }]}>RON / EUR (Prag 0.20)</Text>
+                <Text
+                  style={[
+                    styles.signalVal,
+                    {
+                      color:
+                        prediction.signals.ronEurDynamics.percentChange >= 0
+                          ? colors.success
+                          : colors.danger,
+                    },
+                  ]}
+                >
+                  {prediction.signals.ronEurDynamics.formattedChange}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       )}

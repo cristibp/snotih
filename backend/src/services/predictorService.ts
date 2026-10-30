@@ -1,4 +1,4 @@
-import { BnrPredictorResult, IntradayAverageResult, MoneyMarketData } from '../types';
+import { BnrPredictorResult, IntradayAverageResult, MoneyMarketData, RonEurDynamicsSignal } from '../types';
 import {
   computeRonEurIntradayAverage,
   getIntraday0900To1130Change,
@@ -45,28 +45,93 @@ export async function generateBnrRatePrediction(
       preloadedMoneyMarket ? Promise.resolve(preloadedMoneyMarket) : fetchMoneyMarketData(),
     ]);
 
-  // 1. Componenta regionala CEE (60% pondere totala: 30% PLN, 30% HUF)
+  // 1. Componenta regionala CEE (50% pondere totala: 25% PLN, 25% HUF)
   const ceeScore = (eurPlnSignal.percentChange + eurHufSignal.percentChange) / 2;
 
-  // 2. Componenta EUR/USD overnight (25% pondere)
+  // 2. Componenta EUR/USD overnight (20% pondere)
   // Scaderea EUR/USD (intarirea dolarului) creste presiunea pe valutele emergente (EUR/RON UP)
   const usdImpactScore = -eurUsdSignal.percentChange * 0.5;
 
-  // 3. Componenta de drift intraday EUR/RON (15% pondere)
+  // 3. Componenta de drift interbancar EUR/RON (15% pondere)
   const ronDriftScore = intradayAverage.pctFromPrevBnr ?? 0;
 
-  // Factor de amortizare din piata monetara:
-  // Daca ROBOR 3M este ridicat si lichiditatea e stransa, bancile au stimulente sa apere leul
+  // 4. Componenta de dinamica a puterii de cumparare RON / EUR (15% pondere)
+  // Scaderea RON/EUR (pierderea puterii leului fata de euro) exercita presiune de crestere pe EUR/RON
+  const currentSpotEurRon =
+    intradayAverage.isAvailable && intradayAverage.avgEurRon > 0 ? intradayAverage.avgEurRon : prevBnrRate;
+  const currentRonEur = parseFloat((1 / currentSpotEurRon).toFixed(6));
+  const prevRonEur = parseFloat((1 / prevBnrRate).toFixed(6));
+  const ronEurPctChange =
+    prevRonEur > 0 ? parseFloat((((currentRonEur - prevRonEur) / prevRonEur) * 100).toFixed(4)) : 0;
+  const ronEurFormattedChange = `${ronEurPctChange >= 0 ? '+' : ''}${ronEurPctChange.toFixed(2)}%`;
+
+  const last30 = history.slice(-30);
+  const count30 = last30.length;
+  const sumRonEur30 = last30.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0);
+  const avg30DaysRonEur = count30 > 0 ? parseFloat((sumRonEur30 / count30).toFixed(6)) : currentRonEur;
+  const devFrom30DaysPercent =
+    avg30DaysRonEur > 0
+      ? parseFloat((((currentRonEur - avg30DaysRonEur) / avg30DaysRonEur) * 100).toFixed(2))
+      : 0;
+
+  // Pragul psihologic BNR: 0.2000 EUR/leu (echivalentul a 5.0000 lei/EUR)
+  const psychologicalThreshold = 0.2000;
+  const distanceToThresholdPercent = parseFloat(
+    (((currentRonEur - psychologicalThreshold) / psychologicalThreshold) * 100).toFixed(3)
+  );
+
+  let defensePressure: 'HIGH' | 'MODERATE' | 'LOW' = 'LOW';
+  let defenseDescription = 'Zonă confortabilă de stabilitate valutară (distanțată de pragul de 0.2000 EUR)';
+
+  if (currentRonEur <= 0.2008) {
+    defensePressure = 'HIGH';
+    defenseDescription =
+      'Presiune ridicată: cotația testează pragul psihologic de 0.2000 EUR (5.00 lei). Intervențiile BNR limitează deprecierea suplimentară la fixing.';
+  } else if (currentRonEur <= 0.2014) {
+    defensePressure = 'MODERATE';
+    defenseDescription =
+      'Monitorizare sporită: cotația se află în marginea superioară a coridorului de intervenție BNR.';
+  }
+
+  const ronEurDynamics = {
+    currentRonEur,
+    prevRonEur,
+    percentChange: ronEurPctChange,
+    formattedChange: ronEurFormattedChange,
+    avg30DaysRonEur,
+    devFrom30DaysPercent,
+    psychologicalThreshold,
+    distanceToThresholdPercent,
+    defensePressure,
+    defenseDescription,
+  };
+
+  // Dinamica leului: cand puterea leului scade (-ronEurPctChange > 0), EUR/RON are tendinta sa creasca
+  const ronEurScore = -ronEurPctChange;
+
+  // Factor de amortizare din piata monetara si bariera psihologica BNR
   let dampingFactor = 1.0;
   const policyRate = moneyMarket.policyRate ?? 6.50;
   if (moneyMarket.robor3M > policyRate) {
-    dampingFactor = 0.8; // amortizeaza deprecierea cu 20%
+    dampingFactor = 0.8; // ROBOR ridicat tempereaza volatilitatea
   } else if (moneyMarket.liquidityCondition.includes('Excedent')) {
     dampingFactor = 1.05; // surplusul permite transmiterea fluctuatiilor regionale
   }
 
+  // Comportament asimetric central-bank: Daca se contureaza depreciere (scor > 0)
+  // dar leul este deja periculos de aproape de pragul de 0.2000 EUR (5.0000 lei),
+  // BNR intervine activ, amortizand cresterea cursului la fixingul de la 13:00.
+  const unadjustedRaw = ceeScore * 0.50 + usdImpactScore * 0.20 + ronDriftScore * 0.15 + ronEurScore * 0.15;
+  if (unadjustedRaw > 0) {
+    if (defensePressure === 'HIGH') {
+      dampingFactor *= 0.70; // amortizare de 30% a cresterii BNR datorita apararii pragului de 5.00
+    } else if (defensePressure === 'MODERATE') {
+      dampingFactor *= 0.85;
+    }
+  }
+
   // Scor compus agregat
-  const rawScore = (ceeScore * 0.60 + usdImpactScore * 0.25 + ronDriftScore * 0.15) * dampingFactor;
+  const rawScore = unadjustedRaw * dampingFactor;
   const compositeScore = parseFloat(rawScore.toFixed(4));
 
   // Praguri de decizie
@@ -151,6 +216,12 @@ export async function generateBnrRatePrediction(
     );
   }
 
+  // Explicatie Dinamica RON / EUR & Prag Psihologic
+  const distSign = distanceToThresholdPercent >= 0 ? '+' : '';
+  reasoning.push(
+    `Putere de cumpărare RON / EUR: 1 RON = ${currentRonEur.toFixed(4)} EUR (${ronEurFormattedChange} față de BNR anterior). Distanța până la pragul psihologic de 0.2000 EUR (5.0000 lei) este de ${distSign}${distanceToThresholdPercent}% (${defenseDescription}).`
+  );
+
   const dtNow = getBucharestDateTime(now);
   const isEarlyMorning = dtNow.hour < 11 || (dtNow.hour === 11 && dtNow.minute < 30);
   const evaluationTime = `${String(dtNow.hour).padStart(2, '0')}:${String(dtNow.minute).padStart(2, '0')}`;
@@ -184,6 +255,7 @@ export async function generateBnrRatePrediction(
       eurPln: eurPlnSignal,
       eurHuf: eurHufSignal,
       eurUsdOvernight: eurUsdSignal,
+      ronEurDynamics,
       moneyMarket,
       intradayAverage,
     },
@@ -234,6 +306,12 @@ export function formatPredictorDiscordSection(
   section += `• EUR / PLN (${plnWindow}): \`${predictor.signals.eurPln.formattedChange}\` (\`${predictor.signals.eurPln.startValue.toFixed(4)} → ${predictor.signals.eurPln.endValue.toFixed(4)}\`) ${plnIcon}\n`;
   section += `• EUR / HUF (${hufWindow}): \`${predictor.signals.eurHuf.formattedChange}\` (\`${predictor.signals.eurHuf.startValue.toFixed(2)} → ${predictor.signals.eurHuf.endValue.toFixed(2)}\`) ${hufIcon}\n`;
   section += `• EUR / USD Overnight: \`${predictor.signals.eurUsdOvernight.formattedChange}\` (\`${predictor.signals.eurUsdOvernight.startValue.toFixed(4)} → ${predictor.signals.eurUsdOvernight.endValue.toFixed(4)}\`) ${usdIcon}\n`;
+  if (predictor.signals.ronEurDynamics) {
+    const dyn = predictor.signals.ronEurDynamics;
+    const defenseIcon = dyn.defensePressure === 'HIGH' ? '🛡️' : dyn.defensePressure === 'MODERATE' ? '🟡' : '🟢';
+    const dynDistSign = dyn.distanceToThresholdPercent >= 0 ? '+' : '';
+    section += `• Dinamică RON / EUR: 1 RON = \`${dyn.currentRonEur.toFixed(4)} EUR\` (\`${dyn.formattedChange}\`) │ Prag 0.2000 EUR: \`${dynDistSign}${dyn.distanceToThresholdPercent}%\` ${defenseIcon}\n`;
+  }
   if (predictor.timeWindowDescription && predictor.isEarlyMorning) {
     section += `• Interval analizat: *${predictor.timeWindowDescription}*\n`;
   }

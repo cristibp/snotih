@@ -114,6 +114,10 @@ export default function HomeScreen() {
     ? filteredHistory.reduce((sum, h) => sum + h.eurRonBnr, 0) / filteredHistory.length
     : 0;
 
+  const avgRonEur = filteredHistory.length > 0
+    ? filteredHistory.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0) / filteredHistory.length
+    : 0;
+
   const avgEurUsd = filteredHistory.length > 0
     ? filteredHistory.reduce((sum, h) => sum + h.eurUsdYahoo, 0) / filteredHistory.length
     : 0;
@@ -126,12 +130,14 @@ export default function HomeScreen() {
     : 0;
 
   const dispEurRon = activeEntry ? activeEntry.eurRonBnr : (rates ? rates.eurRonBnr : 0);
+  const dispRonEur = dispEurRon > 0 ? 1 / dispEurRon : 0;
   const dispEurUsd = activeEntry ? activeEntry.eurUsdYahoo : (rates ? rates.eurUsdYahoo : 0);
   const dispRonToUsd = activeEntry 
     ? (activeEntry.eurRonBnr > 0 ? (100 * activeEntry.eurUsdYahoo) / activeEntry.eurRonBnr : 0)
     : (rates && rates.eurRonBnr > 0 ? (100 * rates.eurUsdYahoo) / rates.eurRonBnr : 0);
 
   const prevEurRon = prevEntry ? prevEntry.eurRonBnr : null;
+  const prevRonEur = prevEurRon && prevEurRon > 0 ? 1 / prevEurRon : null;
   const prevEurUsd = prevEntry ? prevEntry.eurUsdYahoo : null;
   const prevRonToUsd = prevEntry && prevEntry.eurRonBnr > 0 
     ? (100 * prevEntry.eurUsdYahoo) / prevEntry.eurRonBnr 
@@ -199,6 +205,16 @@ export default function HomeScreen() {
               <Text style={[styles.value, { color: colors.primary }]}>{dispEurRon.toFixed(4)}</Text>
             </View>
             <RateComparison currentVal={dispEurRon} prevVal={prevEurRon} avgVal={avgEurRon} />
+          </View>
+
+          <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
+            <View style={[styles.row, { borderBottomColor: colors.divider }]}>
+              <Text style={[styles.label, { color: colors.text }]}>RON/EUR (invers BNR)</Text>
+              <Text style={[styles.value, { color: colors.primary }]}>
+                {dispRonEur.toFixed(4)} <Text style={{ fontSize: 13, color: colors.textMuted }}>(100 L = {(dispRonEur * 100).toFixed(2)} €)</Text>
+              </Text>
+            </View>
+            <RateComparison currentVal={dispRonEur} prevVal={prevRonEur} avgVal={avgRonEur} />
           </View>
 
           <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
