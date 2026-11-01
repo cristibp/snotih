@@ -5,6 +5,8 @@ export interface ExchangeRates {
   eurRonBnr: number;
   /** Curs EUR/USD preluat de la Frankfurter.app */
   eurUsdYahoo: number;
+  /** Curs RON/EUR preluat de pe TradingView (FX_IDC:RONEUR) */
+  ronEurTradingView?: number;
   /** Momentul exact (ISO) la care a fost facut fetch-ul */
   fetchedAt: string;
 }

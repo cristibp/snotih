@@ -5,6 +5,11 @@ export interface ExchangeRates {
   eurRonBnr: number;
   /** Curs EUR/USD */
   eurUsdYahoo: number;
+  /** Curs RON/EUR de pe TradingView (sau invers BNR doar ca fallback) */
+  ronEur?: number;
+  ronEurPrevClose?: number | null;
+  ronEurSource?: 'tradingview' | 'bnr-inverse';
+  ronEurTradingView?: number;
   /** Momentul exact (ISO) la care backend-ul a facut fetch-ul */
   fetchedAt?: string;
 }
