@@ -130,14 +130,29 @@ export default function HomeScreen() {
     : 0;
 
   const dispEurRon = activeEntry ? activeEntry.eurRonBnr : (rates ? rates.eurRonBnr : 0);
-  const dispRonEur = dispEurRon > 0 ? 1 / dispEurRon : 0;
+  const viewingLatest =
+    !activeEntry || !rates?.date || activeEntry.date === rates.date;
+  const dispRonEur = viewingLatest && rates?.ronEur
+    ? rates.ronEur
+    : activeEntry?.ronEurTradingView && activeEntry.ronEurTradingView > 0
+      ? activeEntry.ronEurTradingView
+      : dispEurRon > 0
+        ? 1 / dispEurRon
+        : 0;
   const dispEurUsd = activeEntry ? activeEntry.eurUsdYahoo : (rates ? rates.eurUsdYahoo : 0);
   const dispRonToUsd = activeEntry 
     ? (activeEntry.eurRonBnr > 0 ? (100 * activeEntry.eurUsdYahoo) / activeEntry.eurRonBnr : 0)
     : (rates && rates.eurRonBnr > 0 ? (100 * rates.eurUsdYahoo) / rates.eurRonBnr : 0);
 
   const prevEurRon = prevEntry ? prevEntry.eurRonBnr : null;
-  const prevRonEur = prevEurRon && prevEurRon > 0 ? 1 / prevEurRon : null;
+  const prevRonEur =
+    viewingLatest && rates?.ronEurPrevClose
+      ? rates.ronEurPrevClose
+      : prevEntry?.ronEurTradingView && prevEntry.ronEurTradingView > 0
+        ? prevEntry.ronEurTradingView
+        : prevEurRon && prevEurRon > 0
+          ? 1 / prevEurRon
+          : null;
   const prevEurUsd = prevEntry ? prevEntry.eurUsdYahoo : null;
   const prevRonToUsd = prevEntry && prevEntry.eurRonBnr > 0 
     ? (100 * prevEntry.eurUsdYahoo) / prevEntry.eurRonBnr 
@@ -209,7 +224,9 @@ export default function HomeScreen() {
 
           <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
             <View style={[styles.row, { borderBottomColor: colors.divider }]}>
-              <Text style={[styles.label, { color: colors.text }]}>RON/EUR (invers BNR)</Text>
+              <Text style={[styles.label, { color: colors.text }]}>
+                {viewingLatest ? 'RON/EUR (TradingView)' : 'RON/EUR'}
+              </Text>
               <Text style={[styles.value, { color: colors.primary }]}>
                 {dispRonEur.toFixed(4)} <Text style={{ fontSize: 13, color: colors.textMuted }}>(100 L = {(dispRonEur * 100).toFixed(2)} €)</Text>
               </Text>

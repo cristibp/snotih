@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 
 import { fetchBnrEurRon, fetchBnrEurRonDetails } from './services/bnrService';
-import { fetchEurUsd } from './services/exchangeService';
+import { fetchEurUsd, fetchRonEurTradingView } from './services/exchangeService';
 import {
   readRates,
   writeRates,
@@ -54,17 +54,19 @@ app.get('/', (_req, res) => {
  * GET /api/rates
  * Returneaza ultimul curs cunoscut. Folosit de aplicatia mobila.
  */
-app.get('/api/rates', (_req, res) => {
+app.get('/api/rates', async (_req, res) => {
   const rates = readRates();
 
   if (!rates) {
     return res.status(404).json({ error: 'Nu exista inca date despre curs. Asteapta primul fetch.' });
   }
 
-  const ronEur = rates.eurRonBnr > 0 ? parseFloat((1 / rates.eurRonBnr).toFixed(6)) : 0;
+  const quote = await fetchRonEurTradingView(rates.eurRonBnr);
   return res.json({
     ...rates,
-    ronEur,
+    ronEur: quote.ronEur,
+    ronEurPrevClose: quote.prevClose,
+    ronEurSource: quote.source,
   });
 });
 
@@ -144,7 +146,8 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const formattedMonth = `${MONTH_NAMES[prevMonthVal - 1] ?? prevMonthVal} ${prevYear}`;
 
     const ronToUsd100 = rates.eurRonBnr > 0 ? ((100 * rates.eurUsdYahoo) / rates.eurRonBnr) : 0;
-    const ronEur = rates.eurRonBnr > 0 ? (1 / rates.eurRonBnr) : 0;
+    const ronEurQuote = await fetchRonEurTradingView(rates.eurRonBnr);
+    const ronEur = ronEurQuote.ronEur;
 
     // Calculam mediile pe ultimele 30 de zile si abaterile
     const history = readHistory();
@@ -249,7 +252,10 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const diffEurRon = prevDay ? rates.eurRonBnr - prevDay.eurRonBnr : null;
     const pctEurRon = prevDay && prevDay.eurRonBnr > 0 ? (diffEurRon! / prevDay.eurRonBnr) * 100 : null;
 
-    const prevRonEur = prevDay && prevDay.eurRonBnr > 0 ? 1 / prevDay.eurRonBnr : null;
+    const prevRonEur =
+      ronEurQuote.prevClose ??
+      prevDay?.ronEurTradingView ??
+      (prevDay && prevDay.eurRonBnr > 0 ? 1 / prevDay.eurRonBnr : null);
     const diffRonEur = prevRonEur !== null ? ronEur - prevRonEur : null;
     const pctRonEur = prevRonEur !== null && prevRonEur > 0 ? (diffRonEur! / prevRonEur) * 100 : null;
 
@@ -303,11 +309,8 @@ app.post('/api/trigger-webhook', async (req, res) => {
     textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
 
     // RON / EUR
-    if (isBeforeFixing) {
-      textSummary += `🇷🇴 **RON / EUR (invers BNR în vigoare):** \`${ronEur.toFixed(4)} EUR\` *(100 RON = ${(ronEur * 100).toFixed(2)} €)*\n`;
-    } else {
-      textSummary += `🇷🇴 **RON / EUR (invers BNR):** \`${ronEur.toFixed(4)} EUR\` *(100 RON = ${(ronEur * 100).toFixed(2)} €)*\n`;
-    }
+    const ronEurSourceLabel = ronEurQuote.source === 'tradingview' ? 'TradingView' : 'fallback BNR';
+    textSummary += `🇷🇴 **RON / EUR (${ronEurSourceLabel}):** \`${ronEur.toFixed(4)} EUR\` *(100 RON = ${(ronEur * 100).toFixed(2)} €)*\n`;
     if (prevDay && diffRonEur !== null && pctRonEur !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffRonEur, 5)} EUR\` (\`${formatPct(pctRonEur)}\`) ${getIndicator(diffRonEur)}\n`;
     }
@@ -412,6 +415,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
         date: rates.date,
         eurRonBnr: rates.eurRonBnr,
         ronEur: parseFloat(ronEur.toFixed(5)),
+        ronEurSource: ronEurQuote.source,
         eurUsdYahoo: rates.eurUsdYahoo,
         ronToUsd100: parseFloat(ronToUsd100.toFixed(2)),
         fetchedAt: rates.fetchedAt,
@@ -861,16 +865,19 @@ export async function fetchAndSaveRates() {
     fetchBnrEurRonDetails(),
     fetchEurUsd(),
   ]);
+  const ronEurQuote = await fetchRonEurTradingView(bnrDetails.rate);
 
   const eurRonBnr = bnrDetails.rate;
   // BNR nu actualizeaza cursul in weekend, pastrandu-l pe cel de vineri.
   // Folosim data oficiala furnizata de BNR pentru a evita crearea de intrari false de weekend in istoric.
   const rateDate = bnrDetails.date || new Date().toISOString().split('T')[0];
-
   const newRates: ExchangeRates = {
     date: rateDate,
     eurRonBnr,
     eurUsdYahoo,
+    ...(ronEurQuote.source === 'tradingview' && ronEurQuote.ronEur > 0
+      ? { ronEurTradingView: ronEurQuote.ronEur }
+      : {}),
     fetchedAt: new Date().toISOString(),
   };
 

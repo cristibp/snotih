@@ -111,6 +111,66 @@ export interface DatedUsdRate {
   eurUsdYahoo: number;
 }
 
+export interface RonEurQuote {
+  ronEur: number;
+  prevClose: number | null;
+  percentChange: number | null;
+  source: 'tradingview' | 'bnr-inverse';
+}
+
+const TRADINGVIEW_RONEUR_SYMBOL = 'FX_IDC:RONEUR';
+const RON_EUR_CACHE_MS = 60_000;
+let ronEurCache: { quote: RonEurQuote; fetchedAt: number } | null = null;
+
+export function inverseRonEur(eurRon: number): number {
+  return eurRon > 0 ? parseFloat((1 / eurRon).toFixed(6)) : 0;
+}
+
+/**
+ * Preia cotația RON/EUR (leu / euro) de pe TradingView (FX_IDC:RONEUR).
+ * Fallback: inversul EUR/RON BNR, doar dacă scannerul TradingView nu răspunde.
+ */
+export async function fetchRonEurTradingView(fallbackEurRon?: number): Promise<RonEurQuote> {
+  if (ronEurCache && Date.now() - ronEurCache.fetchedAt < RON_EUR_CACHE_MS) {
+    return ronEurCache.quote;
+  }
+
+  try {
+    const response = await axios.get('https://scanner.tradingview.com/symbol', {
+      params: {
+        symbol: TRADINGVIEW_RONEUR_SYMBOL,
+        fields: 'close,change,change_abs',
+      },
+      timeout: 5000,
+      headers: HTTP_HEADERS,
+    });
+
+    const close = response.data?.close;
+    if (typeof close === 'number' && !isNaN(close) && close > 0) {
+      const changeAbs = typeof response.data.change_abs === 'number' ? response.data.change_abs : null;
+      const changePct = typeof response.data.change === 'number' ? response.data.change : null;
+      const quote: RonEurQuote = {
+        ronEur: parseFloat(close.toFixed(6)),
+        prevClose: changeAbs != null ? parseFloat((close - changeAbs).toFixed(6)) : null,
+        percentChange: typeof changePct === 'number' ? parseFloat(changePct.toFixed(4)) : null,
+        source: 'tradingview',
+      };
+      ronEurCache = { quote, fetchedAt: Date.now() };
+      return quote;
+    }
+  } catch (err: any) {
+    console.warn('[ExchangeService] TradingView RON/EUR a eșuat:', err?.message || err);
+  }
+
+  const fallback = inverseRonEur(fallbackEurRon ?? 0);
+  return {
+    ronEur: fallback,
+    prevClose: null,
+    percentChange: null,
+    source: 'bnr-inverse',
+  };
+}
+
 /**
  * Preia cursurile EUR/USD pentru un interval de date (inclusiv), incercand endpoint-urile Frankfurter.
  */

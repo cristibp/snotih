@@ -6,6 +6,7 @@ import {
   getBucharestDateTime,
 } from './intradayService';
 import { fetchMoneyMarketData } from './moneyMarketService';
+import { fetchRonEurTradingView, inverseRonEur } from './exchangeService';
 import { readHistory, readRates } from './rateStore';
 
 /**
@@ -36,13 +37,14 @@ export async function generateBnrRatePrediction(
   const prevBnrRate = prevWorkday?.eurRonBnr || rates?.eurRonBnr || 4.9765;
 
   // Rulam preluarea tuturor semnalelor in paralel
-  const [eurPlnSignal, eurHufSignal, eurUsdSignal, intradayAverage, moneyMarket] =
+  const [eurPlnSignal, eurHufSignal, eurUsdSignal, intradayAverage, moneyMarket, ronEurQuote] =
     await Promise.all([
       getIntraday0900To1130Change('EURPLN=X', 'EUR / PLN', currentDate),
       getIntraday0900To1130Change('EURHUF=X', 'EUR / HUF', currentDate),
       computeEurUsdOvernightChange(prevDate, currentDate),
       computeRonEurIntradayAverage(prevDate, currentDate, prevBnrRate),
       preloadedMoneyMarket ? Promise.resolve(preloadedMoneyMarket) : fetchMoneyMarketData(),
+      fetchRonEurTradingView(prevBnrRate),
     ]);
 
   // 1. Componenta regionala CEE (50% pondere totala: 25% PLN, 25% HUF)
@@ -57,12 +59,20 @@ export async function generateBnrRatePrediction(
 
   // 4. Componenta de dinamica a puterii de cumparare RON / EUR (15% pondere)
   // Scaderea RON/EUR (pierderea puterii leului fata de euro) exercita presiune de crestere pe EUR/RON
-  const currentSpotEurRon =
-    intradayAverage.isAvailable && intradayAverage.avgEurRon > 0 ? intradayAverage.avgEurRon : prevBnrRate;
-  const currentRonEur = parseFloat((1 / currentSpotEurRon).toFixed(6));
-  const prevRonEur = parseFloat((1 / prevBnrRate).toFixed(6));
+  const currentRonEur =
+    ronEurQuote.ronEur > 0 ? ronEurQuote.ronEur : inverseRonEur(prevBnrRate);
+  const prevRonEur =
+    ronEurQuote.prevClose && ronEurQuote.prevClose > 0
+      ? ronEurQuote.prevClose
+      : prevWorkday?.ronEurTradingView && prevWorkday.ronEurTradingView > 0
+        ? prevWorkday.ronEurTradingView
+        : inverseRonEur(prevBnrRate);
   const ronEurPctChange =
-    prevRonEur > 0 ? parseFloat((((currentRonEur - prevRonEur) / prevRonEur) * 100).toFixed(4)) : 0;
+    ronEurQuote.percentChange != null
+      ? ronEurQuote.percentChange
+      : prevRonEur > 0
+        ? parseFloat((((currentRonEur - prevRonEur) / prevRonEur) * 100).toFixed(4))
+        : 0;
   const ronEurFormattedChange = `${ronEurPctChange >= 0 ? '+' : ''}${ronEurPctChange.toFixed(2)}%`;
 
   const last30 = history.slice(-30);
@@ -219,7 +229,7 @@ export async function generateBnrRatePrediction(
   // Explicatie Dinamica RON / EUR & Prag Psihologic
   const distSign = distanceToThresholdPercent >= 0 ? '+' : '';
   reasoning.push(
-    `Putere de cumpărare RON / EUR: 1 RON = ${currentRonEur.toFixed(4)} EUR (${ronEurFormattedChange} față de BNR anterior). Distanța până la pragul psihologic de 0.2000 EUR (5.0000 lei) este de ${distSign}${distanceToThresholdPercent}% (${defenseDescription}).`
+    `Putere de cumpărare RON / EUR (TradingView): 1 RON = ${currentRonEur.toFixed(4)} EUR (${ronEurFormattedChange} față de cotația anterioară). Distanța până la pragul psihologic de 0.2000 EUR (5.0000 lei) este de ${distSign}${distanceToThresholdPercent}% (${defenseDescription}).`
   );
 
   const dtNow = getBucharestDateTime(now);
