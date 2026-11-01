@@ -75,14 +75,63 @@ export async function generateBnrRatePrediction(
         : 0;
   const ronEurFormattedChange = `${ronEurPctChange >= 0 ? '+' : ''}${ronEurPctChange.toFixed(2)}%`;
 
+  const computeMedian = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+
   const last30 = history.slice(-30);
-  const count30 = last30.length;
-  const sumRonEur30 = last30.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0);
-  const avg30DaysRonEur = count30 > 0 ? parseFloat((sumRonEur30 / count30).toFixed(6)) : currentRonEur;
+
+  // 1. RON / EUR pe ultimele 30 de zile
+  const ronEurList30 = last30
+    .map((h) => (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0))
+    .filter((v) => v > 0);
+  const sumRonEur30 = ronEurList30.reduce((sum, v) => sum + v, 0);
+  const avg30DaysRonEur = ronEurList30.length > 0 ? parseFloat((sumRonEur30 / ronEurList30.length).toFixed(6)) : currentRonEur;
+  const median30DaysRonEur = ronEurList30.length > 0 ? parseFloat(computeMedian(ronEurList30).toFixed(6)) : currentRonEur;
   const devFrom30DaysPercent =
     avg30DaysRonEur > 0
       ? parseFloat((((currentRonEur - avg30DaysRonEur) / avg30DaysRonEur) * 100).toFixed(2))
       : 0;
+  const devFrom30DaysMedianPercent =
+    median30DaysRonEur > 0
+      ? parseFloat((((currentRonEur - median30DaysRonEur) / median30DaysRonEur) * 100).toFixed(2))
+      : 0;
+
+  // 2. EUR / RON BNR pe ultimele 30 de zile
+  const eurRonList30 = last30.map((h) => h.eurRonBnr).filter((v) => v > 0);
+  const sumEurRon30 = eurRonList30.reduce((sum, v) => sum + v, 0);
+  const avg30DaysEurRon = eurRonList30.length > 0 ? parseFloat((sumEurRon30 / eurRonList30.length).toFixed(4)) : prevBnrRate;
+  const median30DaysEurRon = eurRonList30.length > 0 ? parseFloat(computeMedian(eurRonList30).toFixed(4)) : prevBnrRate;
+  const devFrom30DaysEurRonAvgPercent =
+    avg30DaysEurRon > 0
+      ? parseFloat((((prevBnrRate - avg30DaysEurRon) / avg30DaysEurRon) * 100).toFixed(2))
+      : 0;
+  const devFrom30DaysEurRonMedianPercent =
+    median30DaysEurRon > 0
+      ? parseFloat((((prevBnrRate - median30DaysEurRon) / median30DaysEurRon) * 100).toFixed(2))
+      : 0;
+
+  const stats30Days = {
+    eurRon: {
+      average: avg30DaysEurRon,
+      median: median30DaysEurRon,
+      devFromAveragePercent: devFrom30DaysEurRonAvgPercent,
+      devFromMedianPercent: devFrom30DaysEurRonMedianPercent,
+      formattedDevAverage: `${devFrom30DaysEurRonAvgPercent >= 0 ? '+' : ''}${devFrom30DaysEurRonAvgPercent.toFixed(2)}%`,
+      formattedDevMedian: `${devFrom30DaysEurRonMedianPercent >= 0 ? '+' : ''}${devFrom30DaysEurRonMedianPercent.toFixed(2)}%`,
+    },
+    ronEur: {
+      average: avg30DaysRonEur,
+      median: median30DaysRonEur,
+      devFromAveragePercent: devFrom30DaysPercent,
+      devFromMedianPercent: devFrom30DaysMedianPercent,
+      formattedDevAverage: `${devFrom30DaysPercent >= 0 ? '+' : ''}${devFrom30DaysPercent.toFixed(2)}%`,
+      formattedDevMedian: `${devFrom30DaysMedianPercent >= 0 ? '+' : ''}${devFrom30DaysMedianPercent.toFixed(2)}%`,
+    },
+  };
 
   // Pragul psihologic BNR: 0.2000 EUR/leu (echivalentul a 5.0000 lei/EUR)
   const psychologicalThreshold = 0.2000;
@@ -110,6 +159,8 @@ export async function generateBnrRatePrediction(
     formattedChange: ronEurFormattedChange,
     avg30DaysRonEur,
     devFrom30DaysPercent,
+    median30DaysRonEur,
+    devFrom30DaysMedianPercent,
     psychologicalThreshold,
     distanceToThresholdPercent,
     defensePressure,
@@ -221,15 +272,26 @@ export async function generateBnrRatePrediction(
   // Explicatie Intraday Average
   if (intradayAverage.isAvailable && intradayAverage.sampleCount > 0) {
     const diffSign = (intradayAverage.diffFromPrevBnr ?? 0) >= 0 ? '+' : '';
+    const diffMedSign = (intradayAverage.diffMedianFromPrevBnr ?? 0) >= 0 ? '+' : '';
+    const medianNote = intradayAverage.medianEurRon !== undefined
+      ? `, mediană ${intradayAverage.medianEurRon.toFixed(4)} RON (${diffMedSign}${intradayAverage.pctMedianFromPrevBnr?.toFixed(2)}% față de BNR anterior)`
+      : '';
     reasoning.push(
-      `Media pieței interbancare (13:00 precedentă → 09:00 azi) a fost ${intradayAverage.avgEurRon.toFixed(4)} RON (${diffSign}${intradayAverage.pctFromPrevBnr?.toFixed(2)}% față de BNR anterior).`
+      `Piața interbancară (13:00 precedentă → 09:00 azi): medie ${intradayAverage.avgEurRon.toFixed(4)} RON (${diffSign}${intradayAverage.pctFromPrevBnr?.toFixed(2)}% față de BNR anterior)${medianNote}.`
     );
   }
 
-  // Explicatie Dinamica RON / EUR & Prag Psihologic
+  // Explicatie Dinamica RON / EUR, Abateri 30 Zile & Prag Psihologic
   const distSign = distanceToThresholdPercent >= 0 ? '+' : '';
+  const devAvgSign = devFrom30DaysPercent >= 0 ? '+' : '';
+  const devMedSign = devFrom30DaysMedianPercent >= 0 ? '+' : '';
+  const devEurRonAvgSign = devFrom30DaysEurRonAvgPercent >= 0 ? '+' : '';
+  const devEurRonMedSign = devFrom30DaysEurRonMedianPercent >= 0 ? '+' : '';
   reasoning.push(
-    `Putere de cumpărare RON / EUR (TradingView): 1 RON = ${currentRonEur.toFixed(4)} EUR (${ronEurFormattedChange} față de cotația anterioară). Distanța până la pragul psihologic de 0.2000 EUR (5.0000 lei) este de ${distSign}${distanceToThresholdPercent}% (${defenseDescription}).`
+    `Putere de cumpărare RON / EUR (TradingView): 1 RON = ${currentRonEur.toFixed(4)} EUR (${ronEurFormattedChange} față de cotația anterioară). Abatere 30 zile RON/EUR: medie ${devAvgSign}${devFrom30DaysPercent}%, mediană ${devMedSign}${devFrom30DaysMedianPercent}%. Distanța până la pragul psihologic de 0.2000 EUR (5.0000 lei) este de ${distSign}${distanceToThresholdPercent}% (${defenseDescription}).`
+  );
+  reasoning.push(
+    `Curs de referință EUR / RON (BNR): ${prevBnrRate.toFixed(4)} RON. Abatere 30 zile EUR/RON: medie ${devEurRonAvgSign}${devFrom30DaysEurRonAvgPercent}% (medie 30z: ${avg30DaysEurRon.toFixed(4)}), mediană ${devEurRonMedSign}${devFrom30DaysEurRonMedianPercent}% (mediană 30z: ${median30DaysEurRon.toFixed(4)}).`
   );
 
   const dtNow = getBucharestDateTime(now);
@@ -261,6 +323,7 @@ export async function generateBnrRatePrediction(
     confidence,
     confidencePercent,
     compositeScore,
+    stats30Days,
     signals: {
       eurPln: eurPlnSignal,
       eurHuf: eurHufSignal,
@@ -284,7 +347,7 @@ export function formatPredictorDiscordSection(
 ): string {
   let section = '';
 
-  // 1. Sesiunea interbancara: media RON / EUR (13:00 ieri -> 09:00 azi)
+  // 1. Sesiunea interbancara: media si mediana RON / EUR (13:00 ieri -> 09:00 azi)
   section += `⏱️ **Sesiune Interbancară (13:00 ieri → 09:00 azi):**\n`;
   if (intradayAvg.isAvailable && intradayAvg.sampleCount > 0) {
     const diffSign = (intradayAvg.diffFromPrevBnr ?? 0) >= 0 ? '+' : '';
@@ -296,8 +359,20 @@ export function formatPredictorDiscordSection(
         ? '🔴'
         : '🟢';
 
-    section += `• Media RON / EUR: \`${intradayAvg.avgEurRon.toFixed(4)} RON\` (1 RON = \`${intradayAvg.avgRonEur.toFixed(4)} EUR\`)\n`;
-    section += `• Față de BNR anterior: \`${diffSign}${(intradayAvg.diffFromPrevBnr ?? 0).toFixed(4)} RON\` (\`${pctSign}${(intradayAvg.pctFromPrevBnr ?? 0).toFixed(2)}%\`) ${diffIndicator} \`[${intradayAvg.sampleCount} cotații]\`\n\n`;
+    section += `• Media RON / EUR: \`${intradayAvg.avgEurRon.toFixed(4)} RON\` (1 RON = \`${intradayAvg.avgRonEur.toFixed(4)} EUR\`) │ Față de BNR: \`${diffSign}${(intradayAvg.diffFromPrevBnr ?? 0).toFixed(4)} RON\` (\`${pctSign}${(intradayAvg.pctFromPrevBnr ?? 0).toFixed(2)}%\`) ${diffIndicator}\n`;
+    if (intradayAvg.medianEurRon !== undefined) {
+      const diffMedSign = (intradayAvg.diffMedianFromPrevBnr ?? 0) >= 0 ? '+' : '';
+      const pctMedSign = (intradayAvg.pctMedianFromPrevBnr ?? 0) >= 0 ? '+' : '';
+      const medIndicator =
+        Math.abs(intradayAvg.diffMedianFromPrevBnr ?? 0) < 0.0001
+          ? '⚪'
+          : (intradayAvg.diffMedianFromPrevBnr ?? 0) > 0
+          ? '🔴'
+          : '🟢';
+      section += `• Mediana RON / EUR: \`${intradayAvg.medianEurRon.toFixed(4)} RON\` (1 RON = \`${(intradayAvg.medianRonEur ?? 1 / intradayAvg.medianEurRon).toFixed(4)} EUR\`) │ Față de BNR: \`${diffMedSign}${(intradayAvg.diffMedianFromPrevBnr ?? 0).toFixed(4)} RON\` (\`${pctMedSign}${(intradayAvg.pctMedianFromPrevBnr ?? 0).toFixed(2)}%\`) ${medIndicator} \`[${intradayAvg.sampleCount} cotații]\`\n\n`;
+    } else {
+      section += `\n`;
+    }
   } else {
     section += `• Media RON / EUR: \`${intradayAvg.avgEurRon.toFixed(4)} RON\` (date intraday de referință) ⚪\n\n`;
   }
@@ -320,7 +395,13 @@ export function formatPredictorDiscordSection(
     const dyn = predictor.signals.ronEurDynamics;
     const defenseIcon = dyn.defensePressure === 'HIGH' ? '🛡️' : dyn.defensePressure === 'MODERATE' ? '🟡' : '🟢';
     const dynDistSign = dyn.distanceToThresholdPercent >= 0 ? '+' : '';
-    section += `• Dinamică RON / EUR: 1 RON = \`${dyn.currentRonEur.toFixed(4)} EUR\` (\`${dyn.formattedChange}\`) │ Prag 0.2000 EUR: \`${dynDistSign}${dyn.distanceToThresholdPercent}%\` ${defenseIcon}\n`;
+    const devAvgStr = dyn.devFrom30DaysPercent !== undefined ? ` │ Medie 30z: \`${(dyn.devFrom30DaysPercent >= 0 ? '+' : '') + dyn.devFrom30DaysPercent.toFixed(2)}%\`` : '';
+    const devMedStr = dyn.devFrom30DaysMedianPercent !== undefined ? ` │ Mediană 30z: \`${(dyn.devFrom30DaysMedianPercent >= 0 ? '+' : '') + dyn.devFrom30DaysMedianPercent.toFixed(2)}%\`` : '';
+    section += `• Dinamică RON / EUR: 1 RON = \`${dyn.currentRonEur.toFixed(4)} EUR\` (\`${dyn.formattedChange}\`)${devAvgStr}${devMedStr} │ Prag 0.2000 EUR: \`${dynDistSign}${dyn.distanceToThresholdPercent}%\` ${defenseIcon}\n`;
+  }
+  if (predictor.stats30Days?.eurRon) {
+    const s = predictor.stats30Days.eurRon;
+    section += `• EUR / RON 30 zile: Medie: \`${s.average.toFixed(4)} RON\` (\`${s.formattedDevAverage}\`) │ Mediană: \`${s.median.toFixed(4)} RON\` (\`${s.formattedDevMedian}\`)\n`;
   }
   if (predictor.timeWindowDescription && predictor.isEarlyMorning) {
     section += `• Interval analizat: *${predictor.timeWindowDescription}*\n`;

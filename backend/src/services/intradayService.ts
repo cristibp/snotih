@@ -210,36 +210,60 @@ export async function computeRonEurIntradayAverage(
       windowEnd,
       avgEurRon: fallbackRate,
       avgRonEur: parseFloat((1 / fallbackRate).toFixed(6)),
+      medianEurRon: fallbackRate,
+      medianRonEur: parseFloat((1 / fallbackRate).toFixed(6)),
       minEurRon: fallbackRate,
       maxEurRon: fallbackRate,
       sampleCount: 0,
       diffFromPrevBnr: 0,
       pctFromPrevBnr: 0,
+      diffMedianFromPrevBnr: 0,
+      pctMedianFromPrevBnr: 0,
       isAvailable: false,
       note: 'Nu au fost gasite cotatii de tranzactionare in intervalul orar mentionat.',
     };
   }
 
-  const sum = filtered.reduce((acc, p) => acc + p.close, 0);
-  const avgEurRon = parseFloat((sum / filtered.length).toFixed(4));
+  const closes = filtered.map((p) => p.close);
+  const sum = closes.reduce((acc, c) => acc + c, 0);
+  const avgEurRon = parseFloat((sum / closes.length).toFixed(4));
   const avgRonEur = parseFloat((1 / avgEurRon).toFixed(6));
-  const minEurRon = parseFloat(Math.min(...filtered.map((p) => p.close)).toFixed(4));
-  const maxEurRon = parseFloat(Math.max(...filtered.map((p) => p.close)).toFixed(4));
+
+  const sortedCloses = [...closes].sort((a, b) => a - b);
+  const midIdx = Math.floor(sortedCloses.length / 2);
+  const medianEurRon = parseFloat(
+    (sortedCloses.length % 2 !== 0
+      ? sortedCloses[midIdx]
+      : (sortedCloses[midIdx - 1] + sortedCloses[midIdx]) / 2
+    ).toFixed(4)
+  );
+  const medianRonEur = parseFloat((1 / medianEurRon).toFixed(6));
+
+  const minEurRon = parseFloat(sortedCloses[0].toFixed(4));
+  const maxEurRon = parseFloat(sortedCloses[sortedCloses.length - 1].toFixed(4));
 
   const diffFromPrevBnr = prevBnrRate > 0 ? parseFloat((avgEurRon - prevBnrRate).toFixed(4)) : 0;
   const pctFromPrevBnr =
     prevBnrRate > 0 ? parseFloat(((diffFromPrevBnr / prevBnrRate) * 100).toFixed(4)) : 0;
+
+  const diffMedianFromPrevBnr = prevBnrRate > 0 ? parseFloat((medianEurRon - prevBnrRate).toFixed(4)) : 0;
+  const pctMedianFromPrevBnr =
+    prevBnrRate > 0 ? parseFloat(((diffMedianFromPrevBnr / prevBnrRate) * 100).toFixed(4)) : 0;
 
   return {
     windowStart,
     windowEnd,
     avgEurRon,
     avgRonEur,
+    medianEurRon,
+    medianRonEur,
     minEurRon,
     maxEurRon,
     sampleCount: filtered.length,
     diffFromPrevBnr,
     pctFromPrevBnr,
+    diffMedianFromPrevBnr,
+    pctMedianFromPrevBnr,
     isAvailable: true,
   };
 }

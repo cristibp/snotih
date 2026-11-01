@@ -109,7 +109,7 @@ export default function PredictorCard({
         <View style={[styles.sectionBlock, { borderBottomColor: colors.divider }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              ⏱️ Media RON / EUR (13:00 → 09:00)
+              ⏱️ Media & Mediana RON / EUR (13:00 → 09:00)
             </Text>
             {intradayAverage.sampleCount > 0 && (
               <Text style={[styles.countBadge, { color: colors.textMuted }]}>
@@ -118,21 +118,41 @@ export default function PredictorCard({
             )}
           </View>
 
-          <View style={styles.valueRow}>
-            <Text style={[styles.mainRate, { color: colors.primary }]}>
-              {intradayAverage.avgEurRon.toFixed(4)}{' '}
-              <Text style={styles.rateUnit}>RON/EUR</Text>
-            </Text>
-            <Text style={[styles.secondaryRate, { color: colors.textMuted }]}>
-              1 RON = {intradayAverage.avgRonEur.toFixed(4)} EUR
-            </Text>
-          </View>
+          <View style={styles.statsTwoColRow}>
+            <View style={styles.statCol}>
+              <Text style={[styles.statColLabel, { color: colors.textMuted }]}>Medie Sesiune</Text>
+              <Text style={[styles.mainRate, { color: colors.primary }]}>
+                {intradayAverage.avgEurRon.toFixed(4)}{' '}
+                <Text style={styles.rateUnit}>RON</Text>
+              </Text>
+              <Text style={[styles.secondaryRate, { color: colors.textMuted }]}>
+                1 RON = {intradayAverage.avgRonEur.toFixed(4)} EUR
+              </Text>
+              {intradayAverage.diffFromPrevBnr !== undefined && (
+                <Text style={[styles.diffNote, { color: intradayAverage.diffFromPrevBnr >= 0 ? colors.danger : colors.success }]}>
+                  {diffSign}{intradayAverage.diffFromPrevBnr.toFixed(4)} ({diffSign}{intradayAverage.pctFromPrevBnr?.toFixed(2)}%)
+                </Text>
+              )}
+            </View>
 
-          {intradayAverage.diffFromPrevBnr !== undefined && (
-            <Text style={[styles.diffNote, { color: intradayAverage.diffFromPrevBnr >= 0 ? colors.danger : colors.success }]}>
-              Față de BNR precedent: {diffSign}{intradayAverage.diffFromPrevBnr.toFixed(4)} RON ({diffSign}{intradayAverage.pctFromPrevBnr?.toFixed(2)}%)
-            </Text>
-          )}
+            {intradayAverage.medianEurRon !== undefined && (
+              <View style={styles.statCol}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>Mediană Sesiune</Text>
+                <Text style={[styles.mainRate, { color: colors.accentBlue }]}>
+                  {intradayAverage.medianEurRon.toFixed(4)}{' '}
+                  <Text style={styles.rateUnit}>RON</Text>
+                </Text>
+                <Text style={[styles.secondaryRate, { color: colors.textMuted }]}>
+                  1 RON = {(intradayAverage.medianRonEur ?? (1 / intradayAverage.medianEurRon)).toFixed(4)} EUR
+                </Text>
+                {intradayAverage.diffMedianFromPrevBnr !== undefined && (
+                  <Text style={[styles.diffNote, { color: intradayAverage.diffMedianFromPrevBnr >= 0 ? colors.danger : colors.success }]}>
+                    {(intradayAverage.diffMedianFromPrevBnr >= 0 ? '+' : '')}{intradayAverage.diffMedianFromPrevBnr.toFixed(4)} ({((intradayAverage.pctMedianFromPrevBnr ?? 0) >= 0 ? '+' : '')}{intradayAverage.pctMedianFromPrevBnr?.toFixed(2)}%)
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
         </View>
       )}
 
@@ -211,6 +231,67 @@ export default function PredictorCard({
                 >
                   {prediction.signals.ronEurDynamics.formattedChange}
                 </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Abateri fata de Media si Mediana pe 30 zile */}
+      {(prediction?.stats30Days || prediction?.signals?.ronEurDynamics?.devFrom30DaysMedianPercent !== undefined) && (
+        <View style={[styles.sectionBlock, { borderBottomColor: colors.divider }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            📅 Abateri Ultimele 30 Zile (Medie & Mediană)
+          </Text>
+
+          <View style={styles.statsTwoColRow}>
+            {/* EUR / RON */}
+            {prediction?.stats30Days?.eurRon && (
+              <View style={[styles.statCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / RON (BNR)</Text>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurRon.average.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurRon.devFromAveragePercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurRon.formattedDevAverage})
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurRon.median.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurRon.devFromMedianPercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurRon.formattedDevMedian})
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* RON / EUR */}
+            {(prediction?.stats30Days?.ronEur || prediction?.signals?.ronEurDynamics) && (
+              <View style={[styles.statCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>RON / EUR (Putere Leu)</Text>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {(prediction?.stats30Days?.ronEur?.average ?? prediction?.signals?.ronEurDynamics?.avg30DaysRonEur ?? 0).toFixed(4)}{' '}
+                    <Text style={{ color: (prediction?.stats30Days?.ronEur?.devFromAveragePercent ?? prediction?.signals?.ronEurDynamics?.devFrom30DaysPercent ?? 0) >= 0 ? colors.success : colors.danger, fontWeight: '700' }}>
+                      ({prediction?.stats30Days?.ronEur?.formattedDevAverage ?? `${(prediction?.signals?.ronEurDynamics?.devFrom30DaysPercent ?? 0) >= 0 ? '+' : ''}${(prediction?.signals?.ronEurDynamics?.devFrom30DaysPercent ?? 0).toFixed(2)}%`})
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {(prediction?.stats30Days?.ronEur?.median ?? prediction?.signals?.ronEurDynamics?.median30DaysRonEur ?? 0).toFixed(4)}{' '}
+                    <Text style={{ color: (prediction?.stats30Days?.ronEur?.devFromMedianPercent ?? prediction?.signals?.ronEurDynamics?.devFrom30DaysMedianPercent ?? 0) >= 0 ? colors.success : colors.danger, fontWeight: '700' }}>
+                      ({prediction?.stats30Days?.ronEur?.formattedDevMedian ?? `${(prediction?.signals?.ronEurDynamics?.devFrom30DaysMedianPercent ?? 0) >= 0 ? '+' : ''}${(prediction?.signals?.ronEurDynamics?.devFrom30DaysMedianPercent ?? 0).toFixed(2)}%`})
+                    </Text>
+                  </Text>
+                </View>
               </View>
             )}
           </View>
@@ -362,6 +443,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
+  },
+  statsTwoColRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  statCol: {
+    flex: 1,
+  },
+  statColLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  statCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+  },
+  statMetricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statMetricName: {
+    fontSize: 11,
+  },
+  statMetricValue: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   signalsGrid: {
     flexDirection: 'row',

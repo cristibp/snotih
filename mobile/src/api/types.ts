@@ -81,11 +81,15 @@ export interface IntradayAverageResult {
   windowEnd: string;
   avgEurRon: number;
   avgRonEur: number;
+  medianEurRon?: number;
+  medianRonEur?: number;
   minEurRon: number;
   maxEurRon: number;
   sampleCount: number;
   diffFromPrevBnr?: number;
   pctFromPrevBnr?: number;
+  diffMedianFromPrevBnr?: number;
+  pctMedianFromPrevBnr?: number;
   isAvailable: boolean;
   note?: string;
 }
@@ -128,10 +132,26 @@ export interface RonEurDynamicsSignal {
   formattedChange: string;
   avg30DaysRonEur?: number;
   devFrom30DaysPercent?: number;
+  median30DaysRonEur?: number;
+  devFrom30DaysMedianPercent?: number;
   psychologicalThreshold: number; // 0.2000 EUR (5.0000 lei)
   distanceToThresholdPercent: number;
   defensePressure: 'HIGH' | 'MODERATE' | 'LOW';
   defenseDescription: string;
+}
+
+export interface PredictorStatItem {
+  average: number;
+  median: number;
+  devFromAveragePercent: number;
+  devFromMedianPercent: number;
+  formattedDevAverage: string;
+  formattedDevMedian: string;
+}
+
+export interface Predictor30DaysStats {
+  eurRon: PredictorStatItem;
+  ronEur: PredictorStatItem;
 }
 
 export interface BnrPredictorResult {
@@ -146,6 +166,7 @@ export interface BnrPredictorResult {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   confidencePercent: number;
   compositeScore: number;
+  stats30Days?: Predictor30DaysStats;
   signals: {
     eurPln: PredictorSignal;
     eurHuf: PredictorSignal;

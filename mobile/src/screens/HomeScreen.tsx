@@ -109,25 +109,32 @@ export default function HomeScreen() {
 
   const prevEntry = fullIndex > 0 ? history[fullIndex - 1] : null;
 
-  // Compute averages for the selected interval
-  const avgEurRon = filteredHistory.length > 0
-    ? filteredHistory.reduce((sum, h) => sum + h.eurRonBnr, 0) / filteredHistory.length
-    : 0;
+  // Compute averages and medians for the selected interval
+  const computeMedian = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
 
-  const avgRonEur = filteredHistory.length > 0
-    ? filteredHistory.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0) / filteredHistory.length
-    : 0;
+  const eurRonVals = filteredHistory.map((h) => h.eurRonBnr).filter((v) => v > 0);
+  const ronEurVals = filteredHistory.map((h) => (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0)).filter((v) => v > 0);
+  const eurUsdVals = filteredHistory.map((h) => h.eurUsdYahoo).filter((v) => v > 0);
+  const ronToUsdVals = filteredHistory
+    .map((h) => (h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0))
+    .filter((v) => v > 0);
 
-  const avgEurUsd = filteredHistory.length > 0
-    ? filteredHistory.reduce((sum, h) => sum + h.eurUsdYahoo, 0) / filteredHistory.length
-    : 0;
+  const avgEurRon = eurRonVals.length > 0 ? eurRonVals.reduce((sum, v) => sum + v, 0) / eurRonVals.length : 0;
+  const medianEurRon = computeMedian(eurRonVals);
 
-  const avgRonToUsd = filteredHistory.length > 0
-    ? filteredHistory.reduce((sum, h) => {
-        const conv = h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0;
-        return sum + conv;
-      }, 0) / filteredHistory.length
-    : 0;
+  const avgRonEur = ronEurVals.length > 0 ? ronEurVals.reduce((sum, v) => sum + v, 0) / ronEurVals.length : 0;
+  const medianRonEur = computeMedian(ronEurVals);
+
+  const avgEurUsd = eurUsdVals.length > 0 ? eurUsdVals.reduce((sum, v) => sum + v, 0) / eurUsdVals.length : 0;
+  const medianEurUsd = computeMedian(eurUsdVals);
+
+  const avgRonToUsd = ronToUsdVals.length > 0 ? ronToUsdVals.reduce((sum, v) => sum + v, 0) / ronToUsdVals.length : 0;
+  const medianRonToUsd = computeMedian(ronToUsdVals);
 
   const dispEurRon = activeEntry ? activeEntry.eurRonBnr : (rates ? rates.eurRonBnr : 0);
   const viewingLatest =
@@ -158,7 +165,17 @@ export default function HomeScreen() {
     ? (100 * prevEntry.eurUsdYahoo) / prevEntry.eurRonBnr 
     : null;
 
-  const RateComparison = ({ currentVal, prevVal, avgVal }: { currentVal: number; prevVal: number | null; avgVal: number }) => {
+  const RateComparison = ({
+    currentVal,
+    prevVal,
+    avgVal,
+    medianVal,
+  }: {
+    currentVal: number;
+    prevVal: number | null;
+    avgVal: number;
+    medianVal: number;
+  }) => {
     let prevStr = 'Față de ieri: N/A';
     let prevColor = colors.textMuted;
     if (prevVal !== null && prevVal > 0) {
@@ -169,20 +186,35 @@ export default function HomeScreen() {
       prevColor = diff >= 0 ? colors.success : colors.danger;
     }
 
-    let avgStr = 'Față de medie: N/A';
+    let avgStr = 'Medie: N/A';
     let avgColor = colors.textMuted;
     if (avgVal > 0) {
       const diff = ((currentVal - avgVal) / avgVal) * 100;
       const sign = diff >= 0 ? '+' : '';
       const word = diff >= 0 ? 'apreciat' : 'depreciat';
-      avgStr = `Față de medie: ${sign}${diff.toFixed(2)}% (${word})`;
+      avgStr = `Medie: ${sign}${diff.toFixed(2)}% (${word})`;
       avgColor = diff >= 0 ? colors.success : colors.danger;
     }
 
+    let medianStr = 'Mediană: N/A';
+    let medianColor = colors.textMuted;
+    if (medianVal > 0) {
+      const diff = ((currentVal - medianVal) / medianVal) * 100;
+      const sign = diff >= 0 ? '+' : '';
+      const word = diff >= 0 ? 'apreciat' : 'depreciat';
+      medianStr = `Mediană: ${sign}${diff.toFixed(2)}% (${word})`;
+      medianColor = diff >= 0 ? colors.success : colors.danger;
+    }
+
     return (
-      <View style={styles.comparisonRow}>
-        <Text style={[styles.comparisonText, { color: prevColor }]}>{prevStr}</Text>
-        <Text style={[styles.comparisonText, { color: avgColor }]}>{avgStr}</Text>
+      <View style={styles.comparisonContainer}>
+        <View style={styles.comparisonRow}>
+          <Text style={[styles.comparisonText, { color: prevColor }]}>{prevStr}</Text>
+        </View>
+        <View style={styles.comparisonRow}>
+          <Text style={[styles.comparisonText, { color: avgColor }]}>{avgStr}</Text>
+          <Text style={[styles.comparisonText, { color: medianColor }]}>{medianStr}</Text>
+        </View>
       </View>
     );
   };
@@ -219,7 +251,7 @@ export default function HomeScreen() {
               <Text style={[styles.label, { color: colors.text }]}>EUR/RON (BNR)</Text>
               <Text style={[styles.value, { color: colors.primary }]}>{dispEurRon.toFixed(4)}</Text>
             </View>
-            <RateComparison currentVal={dispEurRon} prevVal={prevEurRon} avgVal={avgEurRon} />
+            <RateComparison currentVal={dispEurRon} prevVal={prevEurRon} avgVal={avgEurRon} medianVal={medianEurRon} />
           </View>
 
           <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
@@ -231,7 +263,7 @@ export default function HomeScreen() {
                 {dispRonEur.toFixed(4)} <Text style={{ fontSize: 13, color: colors.textMuted }}>(100 L = {(dispRonEur * 100).toFixed(2)} €)</Text>
               </Text>
             </View>
-            <RateComparison currentVal={dispRonEur} prevVal={prevRonEur} avgVal={avgRonEur} />
+            <RateComparison currentVal={dispRonEur} prevVal={prevRonEur} avgVal={avgRonEur} medianVal={medianRonEur} />
           </View>
 
           <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
@@ -239,7 +271,7 @@ export default function HomeScreen() {
               <Text style={[styles.label, { color: colors.text }]}>EUR/USD</Text>
               <Text style={[styles.value, { color: colors.accentBlue }]}>{dispEurUsd.toFixed(4)}</Text>
             </View>
-            <RateComparison currentVal={dispEurUsd} prevVal={prevEurUsd} avgVal={avgEurUsd} />
+            <RateComparison currentVal={dispEurUsd} prevVal={prevEurUsd} avgVal={avgEurUsd} medianVal={medianEurUsd} />
           </View>
 
           <View style={[styles.rateBlock, { borderBottomColor: colors.divider }]}>
@@ -249,7 +281,7 @@ export default function HomeScreen() {
                 {dispRonToUsd.toFixed(2)} $
               </Text>
             </View>
-            <RateComparison currentVal={dispRonToUsd} prevVal={prevRonToUsd} avgVal={avgRonToUsd} />
+            <RateComparison currentVal={dispRonToUsd} prevVal={prevRonToUsd} avgVal={avgRonToUsd} medianVal={medianRonToUsd} />
           </View>
         </View>
       )}
@@ -381,10 +413,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
     paddingBottom: 8,
   },
+  comparisonContainer: {
+    marginTop: 4,
+  },
   comparisonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 2,
     paddingHorizontal: 4,
   },
   comparisonText: {

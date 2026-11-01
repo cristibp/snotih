@@ -153,6 +153,15 @@ export default function RateChart({
         decorator={() => {
           const average = values.reduce((sum, val) => sum + val, 0) / values.length;
           const avgY = getYCoordinate(average, values, 220, 16);
+
+          const sortedVals = [...values].sort((a, b) => a - b);
+          const midIdx = Math.floor(sortedVals.length / 2);
+          const median =
+            sortedVals.length % 2 !== 0
+              ? sortedVals[midIdx]
+              : (sortedVals[midIdx - 1] + sortedVals[midIdx]) / 2;
+          const medY = getYCoordinate(median, values, 220, 16);
+
           const xStart = 64; // default paddingRight
           const xEnd = screenWidth - 40;
 
@@ -160,7 +169,7 @@ export default function RateChart({
           if (activeIndex !== null && activeCoordsRef.current && activeIndex < history.length) {
             const { x, y } = activeCoordsRef.current;
             const boxWidth = 175;
-            const boxHeight = 92;
+            const boxHeight = 108;
 
             // Calculate X position to stay within the chart boundary
             let boxX = x - boxWidth / 2;
@@ -197,6 +206,16 @@ export default function RateChart({
               const word = diff >= 0 ? 'aprec.' : 'deprec.';
               changeAvgStr = `Medie: ${sign}${diff.toFixed(2)}% (${word})`;
               changeAvgColor = diff >= 0 ? '#10B981' : '#EF4444';
+            }
+
+            let changeMedStr = 'Mediană: N/A';
+            let changeMedColor = '#9CA3AF';
+            if (median > 0) {
+              const diff = ((currentVal - median) / median) * 100;
+              const sign = diff >= 0 ? '+' : '';
+              const word = diff >= 0 ? 'aprec.' : 'deprec.';
+              changeMedStr = `Mediană: ${sign}${diff.toFixed(2)}% (${word})`;
+              changeMedColor = diff >= 0 ? '#10B981' : '#EF4444';
             }
 
             tooltipComponent = (
@@ -266,7 +285,7 @@ export default function RateChart({
                 {/* Change vs Yesterday */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 63}
+                  y={boxY + 62}
                   fill={changePrevColor}
                   fontSize={11}
                   fontWeight="bold"
@@ -277,7 +296,7 @@ export default function RateChart({
                 {/* Change vs Average */}
                 <TextSVG
                   x={boxX + boxWidth / 2}
-                  y={boxY + 80}
+                  y={boxY + 78}
                   fill={changeAvgColor}
                   fontSize={11}
                   fontWeight="bold"
@@ -285,14 +304,26 @@ export default function RateChart({
                 >
                   {changeAvgStr}
                 </TextSVG>
+                {/* Change vs Median */}
+                <TextSVG
+                  x={boxX + boxWidth / 2}
+                  y={boxY + 94}
+                  fill={changeMedColor}
+                  fontSize={11}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                >
+                  {changeMedStr}
+                </TextSVG>
               </G>
             );
           }
 
           return (
             <G key="decorator-group">
-              {/* Average Line rendered first */}
+              {/* Average and Median Lines rendered first */}
               <G key="average-line-group">
+                {/* Average Line */}
                 <Line
                   x1={xStart}
                   y1={avgY}
@@ -324,6 +355,40 @@ export default function RateChart({
                   textAnchor="middle"
                 >
                   Medie: {average.toFixed(4)}
+                </TextSVG>
+
+                {/* Median Line */}
+                <Line
+                  x1={xStart}
+                  y1={medY}
+                  x2={xEnd}
+                  y2={medY}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray="2 3"
+                  opacity={0.8}
+                />
+                {/* High-contrast badge container for Median text */}
+                <Rect
+                  x={xStart + 108}
+                  y={medY - 18}
+                  width={104}
+                  height={22}
+                  rx={5}
+                  fill="#0F172A"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  opacity={0.95}
+                />
+                <TextSVG
+                  x={xStart + 160}
+                  y={medY - 3}
+                  fill="#FFFFFF"
+                  fontSize={11}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                >
+                  Mediană: {median.toFixed(4)}
                 </TextSVG>
               </G>
 

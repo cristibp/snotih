@@ -149,10 +149,24 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const ronEurQuote = await fetchRonEurTradingView(rates.eurRonBnr);
     const ronEur = ronEurQuote.ronEur;
 
-    // Calculam mediile pe ultimele 30 de zile si abaterile
+    // Calculam mediile si medianele pe ultimele 30 de zile si abaterile
     const history = readHistory();
     const last30 = history.slice(-30);
     const count = last30.length;
+
+    const computeMedian = (arr: number[]): number => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    };
+
+    const eurRonList30 = last30.map((h) => h.eurRonBnr).filter((v) => v > 0);
+    const ronEurList30 = last30.map((h) => (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0)).filter((v) => v > 0);
+    const eurUsdList30 = last30.map((h) => h.eurUsdYahoo).filter((v) => v > 0);
+    const ronToUsdList30 = last30
+      .map((h) => (h.eurRonBnr > 0 ? (100 * h.eurUsdYahoo) / h.eurRonBnr : 0))
+      .filter((v) => v > 0);
 
     const sumEurRon = last30.reduce((sum, h) => sum + h.eurRonBnr, 0);
     const sumRonEur = last30.reduce((sum, h) => sum + (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0), 0);
@@ -167,15 +181,30 @@ app.post('/api/trigger-webhook', async (req, res) => {
     const avgEurUsd = count > 0 ? sumEurUsd / count : 0;
     const avgRonToUsd = count > 0 ? sumRonToUsd / count : 0;
 
+    const medianEurRon = computeMedian(eurRonList30);
+    const medianRonEur = computeMedian(ronEurList30);
+    const medianEurUsd = computeMedian(eurUsdList30);
+    const medianRonToUsd = computeMedian(ronToUsdList30);
+
     const devEurRon = avgEurRon > 0 ? ((rates.eurRonBnr - avgEurRon) / avgEurRon) * 100 : 0;
     const devRonEur = avgRonEur > 0 ? ((ronEur - avgRonEur) / avgRonEur) * 100 : 0;
     const devEurUsd = avgEurUsd > 0 ? ((rates.eurUsdYahoo - avgEurUsd) / avgEurUsd) * 100 : 0;
     const devRonToUsd = avgRonToUsd > 0 ? ((ronToUsd100 - avgRonToUsd) / avgRonToUsd) * 100 : 0;
 
+    const devMedianEurRon = medianEurRon > 0 ? ((rates.eurRonBnr - medianEurRon) / medianEurRon) * 100 : 0;
+    const devMedianRonEur = medianRonEur > 0 ? ((ronEur - medianRonEur) / medianRonEur) * 100 : 0;
+    const devMedianEurUsd = medianEurUsd > 0 ? ((rates.eurUsdYahoo - medianEurUsd) / medianEurUsd) * 100 : 0;
+    const devMedianRonToUsd = medianRonToUsd > 0 ? ((ronToUsd100 - medianRonToUsd) / medianRonToUsd) * 100 : 0;
+
     const formattedDevEurRon = (devEurRon >= 0 ? '+' : '') + devEurRon.toFixed(2) + '%';
     const formattedDevRonEur = (devRonEur >= 0 ? '+' : '') + devRonEur.toFixed(2) + '%';
     const formattedDevEurUsd = (devEurUsd >= 0 ? '+' : '') + devEurUsd.toFixed(2) + '%';
     const formattedDevRonToUsd = (devRonToUsd >= 0 ? '+' : '') + devRonToUsd.toFixed(2) + '%';
+
+    const formattedDevMedianEurRon = (devMedianEurRon >= 0 ? '+' : '') + devMedianEurRon.toFixed(2) + '%';
+    const formattedDevMedianRonEur = (devMedianRonEur >= 0 ? '+' : '') + devMedianRonEur.toFixed(2) + '%';
+    const formattedDevMedianEurUsd = (devMedianEurUsd >= 0 ? '+' : '') + devMedianEurUsd.toFixed(2) + '%';
+    const formattedDevMedianRonToUsd = (devMedianRonToUsd >= 0 ? '+' : '') + devMedianRonToUsd.toFixed(2) + '%';
 
     // Helper: verifica daca o data este in weekend (Sambata sau Duminica)
     const isWeekend = (dateStr: string): boolean => {
@@ -306,7 +335,8 @@ app.post('/api/trigger-webhook', async (req, res) => {
     if (prevDay && diffEurRon !== null && pctEurRon !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurRon, 4)} RON\` (\`${formatPct(pctEurRon)}\`) ${getIndicator(diffEurRon)}\n`;
     }
-    textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n\n`;
+    textSummary += `• Față de media 30 zile (\`${avgEurRon.toFixed(4)} RON\`): \`${formattedDevEurRon}\` ${getIndicator(devEurRon)}\n`;
+    textSummary += `• Față de mediana 30 zile (\`${medianEurRon.toFixed(4)} RON\`): \`${formattedDevMedianEurRon}\` ${getIndicator(devMedianEurRon)}\n\n`;
 
     // RON / EUR
     const ronEurSourceLabel = ronEurQuote.source === 'tradingview' ? 'TradingView' : 'fallback BNR';
@@ -314,7 +344,8 @@ app.post('/api/trigger-webhook', async (req, res) => {
     if (prevDay && diffRonEur !== null && pctRonEur !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffRonEur, 5)} EUR\` (\`${formatPct(pctRonEur)}\`) ${getIndicator(diffRonEur)}\n`;
     }
-    textSummary += `• Față de media 30 zile (\`${avgRonEur.toFixed(4)} EUR\`): \`${formattedDevRonEur}\` ${getIndicator(devRonEur)}\n\n`;
+    textSummary += `• Față de media 30 zile (\`${avgRonEur.toFixed(4)} EUR\`): \`${formattedDevRonEur}\` ${getIndicator(devRonEur)}\n`;
+    textSummary += `• Față de mediana 30 zile (\`${medianRonEur.toFixed(4)} EUR\`): \`${formattedDevMedianRonEur}\` ${getIndicator(devMedianRonEur)}\n\n`;
 
     // Sesiune interbancara (13:00 ieri -> 09:00 azi), Predictor BNR 13:00 si Piata Monetara (ROBOR/IRCC)
     textSummary += formatPredictorDiscordSection(predictor, intradayAvg, moneyMarket);
@@ -324,14 +355,16 @@ app.post('/api/trigger-webhook', async (req, res) => {
     if (prevDay && diffEurUsd !== null && pctEurUsd !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffEurUsd, 4)} USD\` (\`${formatPct(pctEurUsd)}\`) ${getIndicator(diffEurUsd)}\n`;
     }
-    textSummary += `• Față de media 30 zile (\`${avgEurUsd.toFixed(4)} USD\`): \`${formattedDevEurUsd}\` ${getIndicator(devEurUsd)}\n\n`;
+    textSummary += `• Față de media 30 zile (\`${avgEurUsd.toFixed(4)} USD\`): \`${formattedDevEurUsd}\` ${getIndicator(devEurUsd)}\n`;
+    textSummary += `• Față de mediana 30 zile (\`${medianEurUsd.toFixed(4)} USD\`): \`${formattedDevMedianEurUsd}\` ${getIndicator(devMedianEurUsd)}\n\n`;
 
     // 100 RON in USD
     textSummary += `🇷🇴 **100 RON în USD:** \`${ronToUsd100.toFixed(2)} $\`\n`;
     if (prevDay && diffRonToUsd !== null && pctRonToUsd !== null) {
       textSummary += `• ${prevDayLabel}: \`${formatDiff(diffRonToUsd, 2)} $\` (\`${formatPct(pctRonToUsd)}\`) ${getIndicator(diffRonToUsd)}\n`;
     }
-    textSummary += `• Față de media 30 zile (\`${avgRonToUsd.toFixed(2)} $\`): \`${formattedDevRonToUsd}\` ${getIndicator(devRonToUsd)}\n\n`;
+    textSummary += `• Față de media 30 zile (\`${avgRonToUsd.toFixed(2)} $\`): \`${formattedDevRonToUsd}\` ${getIndicator(devRonToUsd)}\n`;
+    textSummary += `• Față de mediana 30 zile (\`${medianRonToUsd.toFixed(2)} $\`): \`${formattedDevMedianRonToUsd}\` ${getIndicator(devMedianRonToUsd)}\n\n`;
 
     // Luna precedenta
     textSummary += `📅 **Minim / Maxim luna precedentă (${formattedMonth}):**\n`;
@@ -463,21 +496,55 @@ app.post('/api/trigger-webhook', async (req, res) => {
           average: parseFloat(avgEurRon.toFixed(4)),
           deviationPercent: parseFloat(devEurRon.toFixed(4)),
           formattedDeviation: formattedDevEurRon,
+          median: parseFloat(medianEurRon.toFixed(4)),
+          medianDeviationPercent: parseFloat(devMedianEurRon.toFixed(4)),
+          formattedMedianDeviation: formattedDevMedianEurRon,
         },
         ronEur: {
           average: parseFloat(avgRonEur.toFixed(5)),
           deviationPercent: parseFloat(devRonEur.toFixed(4)),
           formattedDeviation: formattedDevRonEur,
+          median: parseFloat(medianRonEur.toFixed(5)),
+          medianDeviationPercent: parseFloat(devMedianRonEur.toFixed(4)),
+          formattedMedianDeviation: formattedDevMedianRonEur,
         },
         eurUsdYahoo: {
           average: parseFloat(avgEurUsd.toFixed(4)),
           deviationPercent: parseFloat(devEurUsd.toFixed(4)),
           formattedDeviation: formattedDevEurUsd,
+          median: parseFloat(medianEurUsd.toFixed(4)),
+          medianDeviationPercent: parseFloat(devMedianEurUsd.toFixed(4)),
+          formattedMedianDeviation: formattedDevMedianEurUsd,
         },
         ronToUsd100: {
           average: parseFloat(avgRonToUsd.toFixed(2)),
           deviationPercent: parseFloat(devRonToUsd.toFixed(4)),
           formattedDeviation: formattedDevRonToUsd,
+          median: parseFloat(medianRonToUsd.toFixed(2)),
+          medianDeviationPercent: parseFloat(devMedianRonToUsd.toFixed(4)),
+          formattedMedianDeviation: formattedDevMedianRonToUsd,
+        },
+      },
+      mediansLast30Days: {
+        eurRonBnr: {
+          median: parseFloat(medianEurRon.toFixed(4)),
+          deviationPercent: parseFloat(devMedianEurRon.toFixed(4)),
+          formattedDeviation: formattedDevMedianEurRon,
+        },
+        ronEur: {
+          median: parseFloat(medianRonEur.toFixed(5)),
+          deviationPercent: parseFloat(devMedianRonEur.toFixed(4)),
+          formattedDeviation: formattedDevMedianRonEur,
+        },
+        eurUsdYahoo: {
+          median: parseFloat(medianEurUsd.toFixed(4)),
+          deviationPercent: parseFloat(devMedianEurUsd.toFixed(4)),
+          formattedDeviation: formattedDevMedianEurUsd,
+        },
+        ronToUsd100: {
+          median: parseFloat(medianRonToUsd.toFixed(2)),
+          deviationPercent: parseFloat(devMedianRonToUsd.toFixed(4)),
+          formattedDeviation: formattedDevMedianRonToUsd,
         },
       },
       previousMonth: prevMonthStats
