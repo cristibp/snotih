@@ -77,7 +77,7 @@ export default function PredictorCard({
           <View>
             <Text style={[styles.cardTitle, { color: colors.text }]}>Predictor Curs BNR</Text>
             <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
-              Fixing 13:00 bazat pe CEE &amp; EUR/USD
+              Fixing 13:00 bazat pe CEE & EUR/USD
             </Text>
           </View>
         </View>
@@ -221,7 +221,7 @@ export default function PredictorCard({
       {moneyMarket && (
         <View style={styles.moneyMarketBlock}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            🏦 Piața Monetară &amp; Lichiditate
+            🏦 Piața Monetară & Lichiditate
           </Text>
 
           <View style={styles.mmGrid}>
@@ -260,13 +260,17 @@ export default function PredictorCard({
 
 const styles = StyleSheet.create({
   card: {
+    width: '100%',
+    alignSelf: 'stretch',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 18,
-    marginBottom: 20,
+    padding: 24,
+    marginTop: 20,
+    marginBottom: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
   loadingText: {
