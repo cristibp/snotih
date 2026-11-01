@@ -3,6 +3,7 @@ import {
   computeRonEurIntradayAverage,
   getIntraday0900To1130Change,
   computeEurUsdOvernightChange,
+  fetch30DaysMarketTrends,
   getBucharestDateTime,
 } from './intradayService';
 import { fetchMoneyMarketData } from './moneyMarketService';
@@ -75,62 +76,32 @@ export async function generateBnrRatePrediction(
         : 0;
   const ronEurFormattedChange = `${ronEurPctChange >= 0 ? '+' : ''}${ronEurPctChange.toFixed(2)}%`;
 
-  const computeMedian = (arr: number[]): number => {
-    if (arr.length === 0) return 0;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  };
+  // Preia datele de evolutie si abateri pe ultimele 30 de zile pentru EUR/PLN, EUR/HUF, EUR/USD, RON/EUR, EUR/RON
+  const trends30d = await fetch30DaysMarketTrends({
+    eurPln: eurPlnSignal.endValue,
+    eurHuf: eurHufSignal.endValue,
+    eurUsd: eurUsdSignal.endValue,
+    ronEur: currentRonEur,
+    eurRon: prevBnrRate,
+  });
 
-  const last30 = history.slice(-30);
+  const avg30DaysRonEur = trends30d.ronEurStat.average;
+  const median30DaysRonEur = trends30d.ronEurStat.median;
+  const devFrom30DaysPercent = trends30d.ronEurStat.devFromAveragePercent;
+  const devFrom30DaysMedianPercent = trends30d.ronEurStat.devFromMedianPercent;
 
-  // 1. RON / EUR pe ultimele 30 de zile
-  const ronEurList30 = last30
-    .map((h) => (h.eurRonBnr > 0 ? 1 / h.eurRonBnr : 0))
-    .filter((v) => v > 0);
-  const sumRonEur30 = ronEurList30.reduce((sum, v) => sum + v, 0);
-  const avg30DaysRonEur = ronEurList30.length > 0 ? parseFloat((sumRonEur30 / ronEurList30.length).toFixed(6)) : currentRonEur;
-  const median30DaysRonEur = ronEurList30.length > 0 ? parseFloat(computeMedian(ronEurList30).toFixed(6)) : currentRonEur;
-  const devFrom30DaysPercent =
-    avg30DaysRonEur > 0
-      ? parseFloat((((currentRonEur - avg30DaysRonEur) / avg30DaysRonEur) * 100).toFixed(2))
-      : 0;
-  const devFrom30DaysMedianPercent =
-    median30DaysRonEur > 0
-      ? parseFloat((((currentRonEur - median30DaysRonEur) / median30DaysRonEur) * 100).toFixed(2))
-      : 0;
-
-  // 2. EUR / RON BNR pe ultimele 30 de zile
-  const eurRonList30 = last30.map((h) => h.eurRonBnr).filter((v) => v > 0);
-  const sumEurRon30 = eurRonList30.reduce((sum, v) => sum + v, 0);
-  const avg30DaysEurRon = eurRonList30.length > 0 ? parseFloat((sumEurRon30 / eurRonList30.length).toFixed(4)) : prevBnrRate;
-  const median30DaysEurRon = eurRonList30.length > 0 ? parseFloat(computeMedian(eurRonList30).toFixed(4)) : prevBnrRate;
-  const devFrom30DaysEurRonAvgPercent =
-    avg30DaysEurRon > 0
-      ? parseFloat((((prevBnrRate - avg30DaysEurRon) / avg30DaysEurRon) * 100).toFixed(2))
-      : 0;
-  const devFrom30DaysEurRonMedianPercent =
-    median30DaysEurRon > 0
-      ? parseFloat((((prevBnrRate - median30DaysEurRon) / median30DaysEurRon) * 100).toFixed(2))
-      : 0;
+  const avg30DaysEurRon = trends30d.eurRonStat.average;
+  const median30DaysEurRon = trends30d.eurRonStat.median;
+  const devFrom30DaysEurRonAvgPercent = trends30d.eurRonStat.devFromAveragePercent;
+  const devFrom30DaysEurRonMedianPercent = trends30d.eurRonStat.devFromMedianPercent;
 
   const stats30Days = {
-    eurRon: {
-      average: avg30DaysEurRon,
-      median: median30DaysEurRon,
-      devFromAveragePercent: devFrom30DaysEurRonAvgPercent,
-      devFromMedianPercent: devFrom30DaysEurRonMedianPercent,
-      formattedDevAverage: `${devFrom30DaysEurRonAvgPercent >= 0 ? '+' : ''}${devFrom30DaysEurRonAvgPercent.toFixed(2)}%`,
-      formattedDevMedian: `${devFrom30DaysEurRonMedianPercent >= 0 ? '+' : ''}${devFrom30DaysEurRonMedianPercent.toFixed(2)}%`,
-    },
-    ronEur: {
-      average: avg30DaysRonEur,
-      median: median30DaysRonEur,
-      devFromAveragePercent: devFrom30DaysPercent,
-      devFromMedianPercent: devFrom30DaysMedianPercent,
-      formattedDevAverage: `${devFrom30DaysPercent >= 0 ? '+' : ''}${devFrom30DaysPercent.toFixed(2)}%`,
-      formattedDevMedian: `${devFrom30DaysMedianPercent >= 0 ? '+' : ''}${devFrom30DaysMedianPercent.toFixed(2)}%`,
-    },
+    eurRon: trends30d.eurRonStat,
+    ronEur: trends30d.ronEurStat,
+    eurPln: trends30d.eurPlnStat,
+    eurHuf: trends30d.eurHufStat,
+    eurUsdOvernight: trends30d.eurUsdStat,
+    history30Days: trends30d.history30Days,
   };
 
   // Pragul psihologic BNR: 0.2000 EUR/leu (echivalentul a 5.0000 lei/EUR)
@@ -400,8 +371,12 @@ export function formatPredictorDiscordSection(
     section += `• Dinamică RON / EUR: 1 RON = \`${dyn.currentRonEur.toFixed(4)} EUR\` (\`${dyn.formattedChange}\`)${devAvgStr}${devMedStr} │ Prag 0.2000 EUR: \`${dynDistSign}${dyn.distanceToThresholdPercent}%\` ${defenseIcon}\n`;
   }
   if (predictor.stats30Days?.eurRon) {
-    const s = predictor.stats30Days.eurRon;
-    section += `• EUR / RON 30 zile: Medie: \`${s.average.toFixed(4)} RON\` (\`${s.formattedDevAverage}\`) │ Mediană: \`${s.median.toFixed(4)} RON\` (\`${s.formattedDevMedian}\`)\n`;
+    const s = predictor.stats30Days;
+    section += `• Abateri 30 zile (vs Medie): EUR/RON \`${s.eurRon.formattedDevAverage}\` │ RON/EUR \`${s.ronEur.formattedDevAverage}\``;
+    if (s.eurPln) section += ` │ EUR/PLN \`${s.eurPln.formattedDevAverage}\``;
+    if (s.eurHuf) section += ` │ EUR/HUF \`${s.eurHuf.formattedDevAverage}\``;
+    if (s.eurUsdOvernight) section += ` │ EUR/USD \`${s.eurUsdOvernight.formattedDevAverage}\``;
+    section += `\n`;
   }
   if (predictor.timeWindowDescription && predictor.isEarlyMorning) {
     section += `• Interval analizat: *${predictor.timeWindowDescription}*\n`;

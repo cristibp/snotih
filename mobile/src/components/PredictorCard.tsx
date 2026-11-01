@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { BnrPredictorResult, IntradayAverageResult, MoneyMarketData } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
+import MultiCurrencyTrendChart from './MultiCurrencyTrendChart';
 
 interface PredictorCardProps {
   prediction: BnrPredictorResult | null;
@@ -244,26 +245,76 @@ export default function PredictorCard({
             📅 Abateri Ultimele 30 Zile (Medie & Mediană)
           </Text>
 
-          <View style={styles.statsTwoColRow}>
-            {/* EUR / RON */}
-            {prediction?.stats30Days?.eurRon && (
-              <View style={[styles.statCard, { backgroundColor: colors.segmentBackground }]}>
-                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / RON (BNR)</Text>
+          <View style={styles.statsGrid}>
+            {/* EUR / PLN */}
+            {prediction?.stats30Days?.eurPln && (
+              <View style={[styles.statGridCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / PLN</Text>
                 <View style={styles.statMetricRow}>
                   <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
                   <Text style={[styles.statMetricValue, { color: colors.text }]}>
-                    {prediction.stats30Days.eurRon.average.toFixed(4)}{' '}
-                    <Text style={{ color: prediction.stats30Days.eurRon.devFromAveragePercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
-                      ({prediction.stats30Days.eurRon.formattedDevAverage})
+                    {prediction.stats30Days.eurPln.average.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurPln.devFromAveragePercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurPln.formattedDevAverage})
                     </Text>
                   </Text>
                 </View>
                 <View style={styles.statMetricRow}>
                   <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
                   <Text style={[styles.statMetricValue, { color: colors.text }]}>
-                    {prediction.stats30Days.eurRon.median.toFixed(4)}{' '}
-                    <Text style={{ color: prediction.stats30Days.eurRon.devFromMedianPercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
-                      ({prediction.stats30Days.eurRon.formattedDevMedian})
+                    {prediction.stats30Days.eurPln.median.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurPln.devFromMedianPercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurPln.formattedDevMedian})
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* EUR / HUF */}
+            {prediction?.stats30Days?.eurHuf && (
+              <View style={[styles.statGridCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / HUF</Text>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurHuf.average.toFixed(2)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurHuf.devFromAveragePercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurHuf.formattedDevAverage})
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurHuf.median.toFixed(2)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurHuf.devFromMedianPercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurHuf.formattedDevMedian})
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* EUR / USD Overnight */}
+            {prediction?.stats30Days?.eurUsdOvernight && (
+              <View style={[styles.statGridCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / USD Overnight</Text>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurUsdOvernight.average.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurUsdOvernight.devFromAveragePercent >= 0 ? colors.accentBlue : colors.danger, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurUsdOvernight.formattedDevAverage})
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurUsdOvernight.median.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurUsdOvernight.devFromMedianPercent >= 0 ? colors.accentBlue : colors.danger, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurUsdOvernight.formattedDevMedian})
                     </Text>
                   </Text>
                 </View>
@@ -272,7 +323,7 @@ export default function PredictorCard({
 
             {/* RON / EUR */}
             {(prediction?.stats30Days?.ronEur || prediction?.signals?.ronEurDynamics) && (
-              <View style={[styles.statCard, { backgroundColor: colors.segmentBackground }]}>
+              <View style={[styles.statGridCard, { backgroundColor: colors.segmentBackground }]}>
                 <Text style={[styles.statColLabel, { color: colors.textMuted }]}>RON / EUR (Putere Leu)</Text>
                 <View style={styles.statMetricRow}>
                   <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
@@ -294,7 +345,37 @@ export default function PredictorCard({
                 </View>
               </View>
             )}
+
+            {/* EUR / RON */}
+            {prediction?.stats30Days?.eurRon && (
+              <View style={[styles.statGridCard, { backgroundColor: colors.segmentBackground }]}>
+                <Text style={[styles.statColLabel, { color: colors.textMuted }]}>EUR / RON (BNR)</Text>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Medie:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurRon.average.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurRon.devFromAveragePercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurRon.formattedDevAverage})
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.statMetricRow}>
+                  <Text style={[styles.statMetricName, { color: colors.textMuted }]}>Mediană:</Text>
+                  <Text style={[styles.statMetricValue, { color: colors.text }]}>
+                    {prediction.stats30Days.eurRon.median.toFixed(4)}{' '}
+                    <Text style={{ color: prediction.stats30Days.eurRon.devFromMedianPercent >= 0 ? colors.danger : colors.success, fontWeight: '700' }}>
+                      ({prediction.stats30Days.eurRon.formattedDevMedian})
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
+
+          {/* Grafic evolutie 30 zile pe acelasi grafic cu culori diferite */}
+          {prediction?.stats30Days?.history30Days && prediction.stats30Days.history30Days.length > 0 && (
+            <MultiCurrencyTrendChart data={prediction.stats30Days.history30Days} />
+          )}
         </View>
       )}
 
@@ -448,6 +529,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statGridCard: {
+    width: '48.5%',
+    minWidth: 140,
+    flexGrow: 1,
+    padding: 10,
+    borderRadius: 8,
   },
   statCol: {
     flex: 1,

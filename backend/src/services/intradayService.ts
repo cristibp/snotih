@@ -1,7 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import { IntradayPoint, IntradayAverageResult, PredictorSignal } from '../types';
+import {
+  IntradayPoint,
+  IntradayAverageResult,
+  PredictorSignal,
+  PredictorStatItem,
+  TrendPoint30Days,
+} from '../types';
 import { readHistory, readRates } from './rateStore';
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -414,5 +420,282 @@ export async function computeEurUsdOvernightChange(
     formattedChange,
     direction,
     impactOnEurRon,
+  };
+}
+
+export interface DailyPoint {
+  date: string;
+  close: number;
+}
+
+function getDailyCachePath(symbol: string): string {
+  const safeSym = symbol.replace(/[^a-zA-Z0-9]/g, '_');
+  return path.join(DATA_DIR, `cache_daily30d_${safeSym}.json`);
+}
+
+function readDailyCache(symbol: string): DailyPoint[] {
+  const filePath = getDailyCachePath(symbol);
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(raw) as DailyPoint[];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function writeDailyCache(symbol: string, points: DailyPoint[]): void {
+  ensureDataDir();
+  const filePath = getDailyCachePath(symbol);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(points, null, 2), 'utf-8');
+  } catch (err) {
+    console.error(`[IntradayService] Eroare la scrierea cache-ului zilnic pentru ${symbol}:`, err);
+  }
+}
+
+/**
+ * Preia cotatiile zilnice pe ultimele ~30 de zile (1 luna) pentru un simbol Yahoo Finance.
+ */
+export async function fetchYahooDaily30Days(symbol: string): Promise<DailyPoint[]> {
+  const cleanSym = symbol.trim().toUpperCase();
+  const hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+
+  for (const host of hosts) {
+    try {
+      const url = `${host}/v8/finance/chart/${encodeURIComponent(cleanSym)}?range=1mo&interval=1d`;
+      const res = await axios.get(url, {
+        headers: HTTP_HEADERS,
+        timeout: 6000,
+      });
+
+      const result = res.data?.chart?.result?.[0];
+      if (!result) continue;
+
+      const timestamps = result.timestamp as number[] | undefined;
+      const quotes = result.indicators?.quote?.[0];
+      const closes = quotes?.close as (number | null)[] | undefined;
+
+      if (!timestamps || !closes || timestamps.length === 0) continue;
+
+      const points: DailyPoint[] = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const val = closes[i];
+        if (typeof val === 'number' && !isNaN(val) && val > 0) {
+          const dt = new Date(timestamps[i] * 1000);
+          const dateStr = dt.toISOString().split('T')[0];
+          points.push({
+            date: dateStr,
+            close: parseFloat(val.toFixed(4)),
+          });
+        }
+      }
+
+      if (points.length > 0) {
+        writeDailyCache(cleanSym, points);
+        return points;
+      }
+    } catch {
+      // continua cu urmatorul host
+    }
+  }
+
+  // Fallback pe cache local
+  const cached = readDailyCache(cleanSym);
+  if (cached.length > 0) {
+    return cached;
+  }
+
+  return [];
+}
+
+export function computeArrayMedian(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+export function buildStatItem(
+  values: number[],
+  currentVal: number,
+  decimals = 4
+): PredictorStatItem {
+  if (values.length === 0) {
+    return {
+      average: currentVal,
+      median: currentVal,
+      devFromAveragePercent: 0,
+      devFromMedianPercent: 0,
+      formattedDevAverage: '+0.00%',
+      formattedDevMedian: '+0.00%',
+    };
+  }
+  const sum = values.reduce((acc, v) => acc + v, 0);
+  const avg = parseFloat((sum / values.length).toFixed(decimals));
+  const med = parseFloat(computeArrayMedian(values).toFixed(decimals));
+  const cur = currentVal > 0 ? currentVal : values[values.length - 1];
+  const devAvg = avg > 0 ? parseFloat((((cur - avg) / avg) * 100).toFixed(2)) : 0;
+  const devMed = med > 0 ? parseFloat((((cur - med) / med) * 100).toFixed(2)) : 0;
+
+  return {
+    average: avg,
+    median: med,
+    devFromAveragePercent: devAvg,
+    devFromMedianPercent: devMed,
+    formattedDevAverage: `${devAvg >= 0 ? '+' : ''}${devAvg.toFixed(2)}%`,
+    formattedDevMedian: `${devMed >= 0 ? '+' : ''}${devMed.toFixed(2)}%`,
+  };
+}
+
+/**
+ * Preia si sintetizeaza evolutia pe 30 de zile a valutelor de interes regional (EUR/PLN, EUR/HUF, EUR/USD, RON/EUR).
+ * Calculeaza media, mediana, abaterile si trendul procentual normalizat (% variatie relativ la ziua 0).
+ */
+export async function fetch30DaysMarketTrends(currentValues: {
+  eurPln?: number;
+  eurHuf?: number;
+  eurUsd?: number;
+  ronEur?: number;
+  eurRon?: number;
+}): Promise<{
+  eurPlnStat: PredictorStatItem;
+  eurHufStat: PredictorStatItem;
+  eurUsdStat: PredictorStatItem;
+  ronEurStat: PredictorStatItem;
+  eurRonStat: PredictorStatItem;
+  history30Days: TrendPoint30Days[];
+}> {
+  const [plnPoints, hufPoints, usdPoints, ronPoints] = await Promise.all([
+    fetchYahooDaily30Days('EURPLN=X'),
+    fetchYahooDaily30Days('EURHUF=X'),
+    fetchYahooDaily30Days('EURUSD=X'),
+    fetchYahooDaily30Days('EURRON=X'),
+  ]);
+
+  const plnMap = new Map(plnPoints.map((p) => [p.date, p.close]));
+  const hufMap = new Map(hufPoints.map((p) => [p.date, p.close]));
+  const usdMap = new Map(usdPoints.map((p) => [p.date, p.close]));
+  const ronMap = new Map(ronPoints.map((p) => [p.date, p.close]));
+
+  const allDates = Array.from(
+    new Set([...plnMap.keys(), ...hufMap.keys(), ...usdMap.keys(), ...ronMap.keys()])
+  ).sort();
+
+  let lastPln = currentValues.eurPln || 4.38;
+  let lastHuf = currentValues.eurHuf || 365.0;
+  let lastUsd = currentValues.eurUsd || 1.118;
+  let lastRon = currentValues.eurRon || 5.30;
+
+  // Daca nu avem deloc puncte din Yahoo (ex: complet offline), cream puncte sintetice pe ultimele 20 zile lucratoare
+  if (allDates.length === 0) {
+    const now = new Date();
+    for (let i = 25; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 86400000);
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+      const dateStr = d.toISOString().split('T')[0];
+      allDates.push(dateStr);
+    }
+  }
+
+  const merged: Array<{
+    date: string;
+    eurPln: number;
+    eurHuf: number;
+    eurUsd: number;
+    ronEur: number;
+    eurRon: number;
+  }> = [];
+
+  for (const date of allDates) {
+    if (plnMap.has(date)) lastPln = plnMap.get(date)!;
+    if (hufMap.has(date)) lastHuf = hufMap.get(date)!;
+    if (usdMap.has(date)) lastUsd = usdMap.get(date)!;
+    if (ronMap.has(date)) lastRon = ronMap.get(date)!;
+
+    merged.push({
+      date,
+      eurPln: parseFloat(lastPln.toFixed(4)),
+      eurHuf: parseFloat(lastHuf.toFixed(2)),
+      eurUsd: parseFloat(lastUsd.toFixed(4)),
+      ronEur: parseFloat((1 / lastRon).toFixed(6)),
+      eurRon: parseFloat(lastRon.toFixed(4)),
+    });
+  }
+
+  // Calculam trendul procentual (% schimbare de la prima zi a perioadei)
+  const basePoint = merged[0] || {
+    eurPln: lastPln,
+    eurHuf: lastHuf,
+    eurUsd: lastUsd,
+    ronEur: 1 / lastRon,
+    eurRon: lastRon,
+  };
+
+  const history30Days: TrendPoint30Days[] = merged.map((p) => {
+    const eurPlnTrendPct =
+      basePoint.eurPln > 0
+        ? parseFloat((((p.eurPln - basePoint.eurPln) / basePoint.eurPln) * 100).toFixed(2))
+        : 0;
+    const eurHufTrendPct =
+      basePoint.eurHuf > 0
+        ? parseFloat((((p.eurHuf - basePoint.eurHuf) / basePoint.eurHuf) * 100).toFixed(2))
+        : 0;
+    const eurUsdTrendPct =
+      basePoint.eurUsd > 0
+        ? parseFloat((((p.eurUsd - basePoint.eurUsd) / basePoint.eurUsd) * 100).toFixed(2))
+        : 0;
+    const ronEurTrendPct =
+      basePoint.ronEur > 0
+        ? parseFloat((((p.ronEur - basePoint.ronEur) / basePoint.ronEur) * 100).toFixed(2))
+        : 0;
+    const eurRonTrendPct =
+      basePoint.eurRon > 0
+        ? parseFloat((((p.eurRon - basePoint.eurRon) / basePoint.eurRon) * 100).toFixed(2))
+        : 0;
+
+    return {
+      date: p.date,
+      eurPln: p.eurPln,
+      eurHuf: p.eurHuf,
+      eurUsd: p.eurUsd,
+      ronEur: parseFloat(p.ronEur.toFixed(4)),
+      eurRon: p.eurRon,
+      eurPlnTrendPct,
+      eurHufTrendPct,
+      eurUsdTrendPct,
+      ronEurTrendPct,
+      eurRonTrendPct,
+    };
+  });
+
+  const plnValues = merged.map((p) => p.eurPln);
+  const hufValues = merged.map((p) => p.eurHuf);
+  const usdValues = merged.map((p) => p.eurUsd);
+  const ronEurValues = merged.map((p) => p.ronEur);
+  const eurRonValues = merged.map((p) => p.eurRon);
+
+  const curPln = currentValues.eurPln ?? (plnValues[plnValues.length - 1] || lastPln);
+  const curHuf = currentValues.eurHuf ?? (hufValues[hufValues.length - 1] || lastHuf);
+  const curUsd = currentValues.eurUsd ?? (usdValues[usdValues.length - 1] || lastUsd);
+  const curRonEur = currentValues.ronEur ?? (ronEurValues[ronEurValues.length - 1] || 1 / lastRon);
+  const curEurRon = currentValues.eurRon ?? (eurRonValues[eurRonValues.length - 1] || lastRon);
+
+  const eurPlnStat = buildStatItem(plnValues, curPln, 4);
+  const eurHufStat = buildStatItem(hufValues, curHuf, 2);
+  const eurUsdStat = buildStatItem(usdValues, curUsd, 4);
+  const ronEurStat = buildStatItem(ronEurValues, curRonEur, 4);
+  const eurRonStat = buildStatItem(eurRonValues, curEurRon, 4);
+
+  return {
+    eurPlnStat,
+    eurHufStat,
+    eurUsdStat,
+    ronEurStat,
+    eurRonStat,
+    history30Days,
   };
 }

@@ -208,11 +208,13 @@ export default function HomeScreen() {
 
     return (
       <View style={styles.comparisonContainer}>
-        <View style={styles.comparisonRow}>
+        <View style={styles.comparisonItem}>
           <Text style={[styles.comparisonText, { color: prevColor }]}>{prevStr}</Text>
         </View>
-        <View style={styles.comparisonRow}>
+        <View style={styles.comparisonItem}>
           <Text style={[styles.comparisonText, { color: avgColor }]}>{avgStr}</Text>
+        </View>
+        <View style={styles.comparisonItem}>
           <Text style={[styles.comparisonText, { color: medianColor }]}>{medianStr}</Text>
         </View>
       </View>
@@ -419,6 +421,12 @@ const styles = StyleSheet.create({
   comparisonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 2,
+    paddingHorizontal: 4,
+  },
+  comparisonItem: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     marginTop: 2,
     paddingHorizontal: 4,
   },

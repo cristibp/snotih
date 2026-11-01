@@ -149,9 +149,27 @@ export interface PredictorStatItem {
   formattedDevMedian: string;
 }
 
+export interface TrendPoint30Days {
+  date: string;
+  eurPln: number;
+  eurHuf: number;
+  eurUsd: number;
+  ronEur: number;
+  eurRon?: number;
+  eurPlnTrendPct: number;
+  eurHufTrendPct: number;
+  eurUsdTrendPct: number;
+  ronEurTrendPct: number;
+  eurRonTrendPct?: number;
+}
+
 export interface Predictor30DaysStats {
   eurRon: PredictorStatItem;
   ronEur: PredictorStatItem;
+  eurPln?: PredictorStatItem;
+  eurHuf?: PredictorStatItem;
+  eurUsdOvernight?: PredictorStatItem;
+  history30Days?: TrendPoint30Days[];
 }
 
 export interface BnrPredictorResult {
