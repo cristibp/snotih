@@ -29,6 +29,7 @@ import {
   resetRsiSymbols,
 } from './services/rsiStore';
 import { generateRatesChartBuffer } from './services/chartService';
+import { describeWebhookError, sendRatesWebhook } from './services/webhookService';
 import {
   generateBnrRatePrediction,
   formatPredictorDiscordSection,
@@ -586,39 +587,9 @@ app.post('/api/trigger-webhook', async (req, res) => {
 
     const headers = formatDiscordWebhookRequest();
 
-    let chartAttached = false;
-    let webhookStatus = 200;
-
     // Generam graficul de evolutie pe ultimele zile (pana la 15 zile)
     const chartBuffer = await generateRatesChartBuffer(sortedHistory, 15);
-
-    if (chartBuffer) {
-      try {
-        const formData = new FormData();
-        formData.append('payload_json', JSON.stringify(payload));
-        formData.append('files[0]', new Blob([chartBuffer], { type: 'image/png' }), 'chart.png');
-
-        const response = await axios.post(webhookUrl, formData, {
-          headers: {
-            ...headers,
-          },
-          timeout: 15000,
-        });
-
-        chartAttached = true;
-        webhookStatus = response.status;
-      } catch (multipartErr: any) {
-        console.warn('Trimiterea webhook-ului cu fisier grafic atasat a esuat, se incearca fallback pe JSON simplu:', multipartErr.message || multipartErr);
-      }
-    }
-
-    if (!chartAttached) {
-      const response = await axios.post(webhookUrl, payload, {
-        headers,
-        timeout: 10000,
-      });
-      webhookStatus = response.status;
-    }
+    const { chartAttached, webhookStatus } = await sendRatesWebhook(webhookUrl, payload, chartBuffer, headers);
 
     return res.json({
       success: true,
@@ -630,7 +601,7 @@ app.post('/api/trigger-webhook', async (req, res) => {
       moneyMarket,
     });
   } catch (err: any) {
-    console.error('Eroare in /api/trigger-webhook:', err.message || err);
+    console.error('Eroare in /api/trigger-webhook:', describeWebhookError(err));
     return res.status(500).json({
       error: 'WEBHOOK-ERROR',
       details: err.message || String(err),
