@@ -88,6 +88,36 @@ test('generic webhooks retain the complete JSON payload in one request', async t
   assert.deepEqual(received[0].payload, payload);
 });
 
+for (const withChart of [false, true]) {
+  test(`proxy /webhooks route splits a 2523-character report ${withChart ? 'with' : 'without'} a chart`, async t => {
+    const { url, received } = await mockWebhook(t);
+    const content = 'x'.repeat(2523);
+    const result = await sendRatesWebhook(
+      url.replace('/api/webhooks/', '/webhooks/') + '?wait=true',
+      { content, textSummary: content },
+      withChart ? Buffer.from('chart') : null,
+      { 'x-proxy-secret': 'test-secret' }
+    );
+    assert.equal(result.chartAttached, withChart);
+    assert.equal(result.webhookStatus, 204);
+    assert.equal(received.length, 2);
+    assert.deepEqual(received.map(r => r.payload.content.length), [2000, 523]);
+    assert.equal(received.map(r => r.payload.content).join(''), content);
+    assert.equal(received[0].multipart, withChart);
+    assert.equal(received[1].multipart, false);
+    assert.ok(received.every(r => r.headers['x-proxy-secret'] === 'test-secret'));
+  });
+}
+
+test('proxy /webhooks route also splits the JSON fallback after a chart rejection', async t => {
+  const { url, received } = await mockWebhook(t, r => r.multipart ? 400 : undefined);
+  const content = 'x'.repeat(2523);
+  const result = await sendRatesWebhook(url.replace('/api/webhooks/', '/webhooks/'), { content }, Buffer.from('chart'), {});
+  assert.equal(result.chartAttached, false);
+  assert.deepEqual(received.map(r => r.payload.content.length), [2000, 2000, 523]);
+  assert.equal(received.slice(1).map(r => r.payload.content).join(''), content);
+});
+
 test('failed continuation propagates without replaying successful messages', async t => {
   const { url, received } = await mockWebhook(t, (_r, count) => count > 1 ? 400 : 204);
   await assert.rejects(sendRatesWebhook(url, { content: 'x'.repeat(4500) }, Buffer.from('chart'), {}));

@@ -42,9 +42,11 @@ export async function sendRatesWebhook(
   chartBuffer: Buffer | null,
   headers: Record<string, string>
 ): Promise<{ chartAttached: boolean; webhookStatus: number }> {
-  // Aceeasi ruta este folosita si de proxy-ul Discord. Webhook-urile generice
-  // pastreaza raportul JSON complet intr-o singura cerere.
-  const isDiscord = /^\/api\/(?:v\d+\/)?webhooks\//.test(new URL(webhookUrl).pathname);
+  // Proxy-ul Discord foloseste /webhooks/... si adauga el prefixul /api.
+  // Recunoastem si rutele directe /api/webhooks/... sau /api/v10/webhooks/...
+  // pentru a aplica limita Discord indiferent de destinatie.
+  // Webhook-urile generice pastreaza raportul JSON complet intr-o singura cerere.
+  const isDiscord = /^\/(?:api\/(?:v\d+\/)?)?webhooks\//.test(new URL(webhookUrl).pathname);
   const contents = isDiscord && typeof payload.content === 'string'
     ? splitDiscordContent(payload.content)
     : [payload.content];
