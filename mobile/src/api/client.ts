@@ -8,6 +8,7 @@ import {
   BnrPredictorResult,
   IntradayAverageResult,
   MoneyMarketData,
+  YieldCurveStatusResponse,
 } from './types';
 
 // Inlocuieste cu URL-ul real oferit de Render dupa deployment.
@@ -173,3 +174,42 @@ export async function fetchMoneyMarket(): Promise<MoneyMarketData> {
 
   return (await response.json()) as MoneyMarketData;
 }
+
+/**
+ * Preia starea indicatorului compus de risc de recesiune (Recession Proximity Indicator).
+ */
+export async function fetchYieldCurveStatus(
+  forceRefresh: boolean = false,
+  days: number = 30
+): Promise<YieldCurveStatusResponse> {
+  const queryParams = new URLSearchParams();
+  if (forceRefresh) queryParams.set('refresh', 'true');
+  if (days) queryParams.set('days', days.toString());
+
+  const url = `${API_BASE_URL}/api/macro/yield-curve/status?${queryParams.toString()}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea indicatorului de recesiune (status ${response.status})`);
+  }
+
+  return (await response.json()) as YieldCurveStatusResponse;
+}
+
+/**
+ * Forteaza recalcularea si actualizarea indicatorului de recesiune pe server.
+ */
+export async function refreshYieldCurveStatus(days: number = 30): Promise<YieldCurveStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/macro/yield-curve/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Eroare la actualizarea fortata a indicatorului de recesiune (status ${response.status})`);
+  }
+
+  return (await response.json()) as YieldCurveStatusResponse;
+}
+

@@ -3,16 +3,17 @@ import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } fro
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeScreen from './src/screens/HomeScreen';
 import TradingScreen from './src/screens/TradingScreen';
+import RecessionScreen from './src/screens/RecessionScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
-export type TabType = 'rates' | 'trading';
+export type TabType = 'rates' | 'trading' | 'recession';
 export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
 
 function getInitialTab(): TabType {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
-      if (stored === 'rates' || stored === 'trading') {
+      if (stored === 'rates' || stored === 'trading' || stored === 'recession') {
         return stored;
       }
     }
@@ -32,7 +33,7 @@ function MainApp() {
     (async () => {
       try {
         const storedTab = await AsyncStorage.getItem(TAB_STORAGE_KEY);
-        if (isMounted && (storedTab === 'rates' || storedTab === 'trading')) {
+        if (isMounted && (storedTab === 'rates' || storedTab === 'trading' || storedTab === 'recession')) {
           setActiveTabState(storedTab);
         }
       } catch (err) {
@@ -81,8 +82,9 @@ function MainApp() {
                   { color: colors.segmentText },
                   activeTab === 'rates' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
                 ]}
+                numberOfLines={1}
               >
-                💶 Curs Valutar
+                💶 Curs
               </Text>
             </TouchableOpacity>
 
@@ -100,8 +102,29 @@ function MainApp() {
                   { color: colors.segmentText },
                   activeTab === 'trading' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
                 ]}
+                numberOfLines={1}
               >
-                📈 Trading (RSI)
+                📈 RSI
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                activeTab === 'recession' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+              ]}
+              onPress={() => handleTabPress('recession')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: colors.segmentText },
+                  activeTab === 'recession' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                ]}
+                numberOfLines={1}
+              >
+                📉 Recesiune
               </Text>
             </TouchableOpacity>
           </View>
@@ -127,7 +150,13 @@ function MainApp() {
       </View>
 
       <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-        {activeTab === 'rates' ? <HomeScreen /> : <TradingScreen />}
+        {activeTab === 'rates' ? (
+          <HomeScreen />
+        ) : activeTab === 'trading' ? (
+          <TradingScreen />
+        ) : (
+          <RecessionScreen />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -163,7 +192,8 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
@@ -176,7 +206,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   segmentTextActive: {

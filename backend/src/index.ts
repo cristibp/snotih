@@ -36,6 +36,7 @@ import {
 } from './services/predictorService';
 import { computeRonEurIntradayAverage, getBucharestDateTime } from './services/intradayService';
 import { fetchMoneyMarketData } from './services/moneyMarketService';
+import { getYieldCurveStatus } from './services/macroService';
 import { ExchangeRates, RsiCheckResponse } from './types';
 
 dotenv.config();
@@ -967,6 +968,46 @@ app.get('/api/fetch-rates', async (req, res) => {
   } catch (err) {
     console.error('Eroare in /api/fetch-rates:', err);
     return res.status(500).json({ error: 'Actualizarea cursului a esuat' });
+  }
+});
+
+/**
+ * GET /api/macro/yield-curve/status
+ * Returneaza indicatorul compus de risc de recesiune (Recession Proximity Indicator),
+ * regimul curent al curbei de randamente, metricile in bps si seriile recente.
+ * Foloseste cache in memorie (TTL 6 ore) si fallback pe ultima stare valida/snapshot local.
+ */
+app.get('/api/macro/yield-curve/status', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === 'true';
+    const historyDays = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
+
+    const status = await getYieldCurveStatus(forceRefresh, historyDays);
+    return res.json(status);
+  } catch (err: any) {
+    console.error('Eroare la /api/macro/yield-curve/status:', err);
+    return res.status(500).json({
+      error: 'Eroare la calcularea indicatorului de risc de recesiune.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * POST /api/macro/yield-curve/refresh
+ * Forteaza actualizarea datelor de la FRED si recalcularea indicatorului.
+ */
+app.post('/api/macro/yield-curve/refresh', async (req, res) => {
+  try {
+    const historyDays = req.body?.days ? parseInt(req.body.days, 10) : undefined;
+    const status = await getYieldCurveStatus(true, historyDays);
+    return res.json(status);
+  } catch (err: any) {
+    console.error('Eroare la /api/macro/yield-curve/refresh:', err);
+    return res.status(500).json({
+      error: 'Eroare la actualizarea fortata a indicatorului de recesiune.',
+      message: err?.message || String(err),
+    });
   }
 });
 

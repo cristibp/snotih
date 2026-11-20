@@ -197,3 +197,54 @@ export interface BnrPredictorResult {
   reasoning: string[];
 }
 
+export type RecessionRegime = 'NORMAL' | 'FLATTENING' | 'INVERTED' | 'UNINVERSION_CRITICAL';
+
+export type SteepeningType = 'BULL_STEEPENER' | 'BEAR_STEEPENER' | 'NEUTRAL';
+
+export interface RawFredObservation {
+  date: string;
+  valueBps: number;
+}
+
+export interface YieldCurveObservation {
+  date: string;
+  t10y2y_bps: number;
+  t10y3m_bps: number;
+  sma5_10y2y: number;
+  sma5_10y3m: number;
+  delta_20d_10y3m: number;
+  delta_60d_10y3m: number;
+  is_inverted_2y: boolean;
+  is_inverted_3m: boolean;
+  days_since_last_inversion_2y: number | null;
+  days_since_last_inversion_3m: number | null;
+  steepening_type: SteepeningType;
+  dgs10?: number;
+  dgs2?: number;
+  dgs3mo?: number;
+}
+
+export interface RecessionScoreComponents {
+  score3m: number;
+  score2y: number;
+  scoreSteepening: number;
+  weight3m: number;
+  weight2y: number;
+  weightSteepening: number;
+}
+
+export interface YieldCurveStatusResponse {
+  score: number; // 0-100
+  regime: RecessionRegime;
+  regimeNumber: 0 | 1 | 2 | 3;
+  regimeLabel: string;
+  description: string;
+  current: YieldCurveObservation;
+  components: RecessionScoreComponents;
+  history: YieldCurveObservation[];
+  lastUpdated: string;
+  cached: boolean;
+  warning?: string;
+}
+
+
