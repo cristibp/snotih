@@ -9,6 +9,10 @@ import {
   IntradayAverageResult,
   MoneyMarketData,
   YieldCurveStatusResponse,
+  WatchlistSymbolMeta,
+  MarketQuote,
+  WatchlistQuotesResponse,
+  WatchlistHistoryResponse,
 } from './types';
 
 // Inlocuieste cu URL-ul real oferit de Render dupa deployment.
@@ -212,4 +216,46 @@ export async function refreshYieldCurveStatus(days: number = 30): Promise<YieldC
 
   return (await response.json()) as YieldCurveStatusResponse;
 }
+
+/**
+ * Preluare catalog complet de simboluri din watchlist.csv.
+ */
+export async function fetchWatchlistSymbols(): Promise<WatchlistSymbolMeta[]> {
+  const response = await fetch(`${API_BASE_URL}/api/watchlist/symbols`);
+  if (!response.ok) {
+    throw new Error(`Nu s-au putut prelua simbolurile watchlist (status ${response.status})`);
+  }
+  const data = await response.json();
+  return data.symbols as WatchlistSymbolMeta[];
+}
+
+/**
+ * Preluare cotatii in timp real pentru o lista de simboluri (cu Finnhub primary + Yahoo fallback).
+ */
+export async function fetchWatchlistQuotes(symbols?: string[]): Promise<WatchlistQuotesResponse> {
+  const queryParam = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}` : '';
+  const response = await fetch(`${API_BASE_URL}/api/watchlist/quotes${queryParam}`);
+  if (!response.ok) {
+    throw new Error(`Nu s-au putut prelua cotatiile watchlist (status ${response.status})`);
+  }
+  return (await response.json()) as WatchlistQuotesResponse;
+}
+
+/**
+ * Preluare serii/lumanari istorice pentru graficul simbolului activ.
+ */
+export async function fetchWatchlistHistory(
+  symbol: string,
+  range: string = '1d',
+  interval: string = '5m'
+): Promise<WatchlistHistoryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/watchlist/history/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Nu s-au putut prelua datele istorice pentru ${symbol} (status ${response.status})`);
+  }
+  return (await response.json()) as WatchlistHistoryResponse;
+}
+
 

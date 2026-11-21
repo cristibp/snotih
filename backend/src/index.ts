@@ -37,6 +37,9 @@ import {
 import { computeRonEurIntradayAverage, getBucharestDateTime } from './services/intradayService';
 import { fetchMoneyMarketData } from './services/moneyMarketService';
 import { getYieldCurveStatus } from './services/macroService';
+import { loadWatchlistSymbols } from './services/watchlistCsvLoader';
+import { getQuotesForSymbols } from './services/marketQuoteService';
+import { fetchWatchlistCandles } from './services/marketHistoryService';
 import { ExchangeRates, RsiCheckResponse } from './types';
 
 dotenv.config();
@@ -1006,6 +1009,85 @@ app.post('/api/macro/yield-curve/refresh', async (req, res) => {
     console.error('Eroare la /api/macro/yield-curve/refresh:', err);
     return res.status(500).json({
       error: 'Eroare la actualizarea fortata a indicatorului de recesiune.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * GET /api/watchlist/symbols
+ * Returneaza catalogul complet de simboluri din watchlist.csv (normalizate si deduplicate).
+ */
+app.get('/api/watchlist/symbols', (_req, res) => {
+  try {
+    const symbols = loadWatchlistSymbols();
+    return res.json({
+      symbols,
+      count: symbols.length,
+    });
+  } catch (err: any) {
+    console.error('Eroare la /api/watchlist/symbols:', err);
+    return res.status(500).json({
+      error: 'Eroare la incarcarea simbolurilor din watchlist.csv',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * GET /api/watchlist/quotes
+ * Query: ?symbols=EMIM.AS,VWCE.DE,AAPL
+ * Returneaza cotatiile curente cu Finnhub primary + Yahoo fallback + server-side caching.
+ */
+app.get('/api/watchlist/quotes', async (req, res) => {
+  try {
+    let symbolsToFetch: string[] = [];
+    const querySymbols = req.query.symbols;
+
+    if (typeof querySymbols === 'string' && querySymbols.trim()) {
+      symbolsToFetch = querySymbols.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+    } else {
+      // Daca nu se specifica simboluri, incarcam primele 10 din catalog
+      const catalog = loadWatchlistSymbols();
+      symbolsToFetch = catalog.slice(0, 10).map((s) => s.symbol);
+    }
+
+    const quotes = await getQuotesForSymbols(symbolsToFetch);
+    return res.json({
+      timestamp: new Date().toISOString(),
+      quotes,
+      total: Object.keys(quotes).length,
+    });
+  } catch (err: any) {
+    console.error('Eroare la /api/watchlist/quotes:', err);
+    return res.status(500).json({
+      error: 'Eroare la obtinerea cotatiilor.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * GET /api/watchlist/history/:symbol
+ * Query: ?range=1d&interval=5m
+ * Returneaza lumanari/serii istorice pentru graficul activ.
+ */
+app.get('/api/watchlist/history/:symbol', async (req, res) => {
+  try {
+    const symbol = req.params.symbol;
+    if (!symbol) {
+      return res.status(400).json({ error: 'Parametrul symbol este obligatoriu.' });
+    }
+
+    const range = (req.query.range as string) || '1d';
+    const interval = (req.query.interval as string) || '5m';
+
+    const history = await fetchWatchlistCandles(symbol, range, interval);
+    return res.json(history);
+  } catch (err: any) {
+    console.error(`Eroare la /api/watchlist/history/${req.params.symbol}:`, err);
+    return res.status(500).json({
+      error: 'Eroare la obtinerea istoricului graficului.',
       message: err?.message || String(err),
     });
   }

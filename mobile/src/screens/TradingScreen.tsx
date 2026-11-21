@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  AppStateStatus,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,7 +24,13 @@ import buildInfo from '../constants/buildInfo.json';
 
 import { useTheme } from '../theme/ThemeContext';
 
-export default function TradingScreen() {
+export const RSI_POLLING_SECONDS = 120;
+
+interface TradingScreenProps {
+  isActive?: boolean;
+}
+
+export default function TradingScreen({ isActive = true }: TradingScreenProps) {
   const { colors, isBlack } = useTheme();
   const [config, setConfig] = useState<RsiSymbolsConfig | null>(null);
   const [rsiResults, setRsiResults] = useState<RsiSymbolResult[]>([]);
@@ -32,6 +40,16 @@ export default function TradingScreen() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [lastCheckResponse, setLastCheckResponse] = useState<RsiCheckResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Polling RSI la 120 secunde cand utilizatorul se afla pe pagina
+  const [countdown, setCountdown] = useState<number>(RSI_POLLING_SECONDS);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isBackgroundedRef = useRef<boolean>(false);
+  const lastFetchedTimestampRef = useRef<number>(Date.now());
 
   // Stare pentru editarea listei de simboluri
   const [symbolChips, setSymbolChips] = useState<string[]>([]);
@@ -47,6 +65,9 @@ export default function TradingScreen() {
       setConfig(symbolsData);
       setSymbolChips(symbolsData.symbols);
       setRsiResults(statusData.results);
+      setLastPolledAt(new Date());
+      lastFetchedTimestampRef.current = Date.now();
+      setCountdown(RSI_POLLING_SECONDS);
     } catch (err: any) {
       console.error('Eroare la incarcarea datelor RSI:', err);
       setErrorMessage(err?.message || 'Nu s-au putut încărca datele RSI.');
@@ -56,9 +77,110 @@ export default function TradingScreen() {
     }
   }, []);
 
+  // Functie de polling pentru actualizarea periodica a valorilor RSI
+  const pollRsiStatus = useCallback(async () => {
+    setIsPolling(true);
+    try {
+      const statusData = await fetchRsiStatus();
+      setRsiResults(statusData.results);
+      setLastPolledAt(new Date());
+      lastFetchedTimestampRef.current = Date.now();
+    } catch (err: any) {
+      console.warn('Eroare la polling RSI status:', err);
+    } finally {
+      setIsPolling(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Polling la 120 de secunde cand userul este pe pagina si ecranul este activ
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    if (!isActive) {
+      return;
+    }
+
+    // Daca userul s-a intors pe tab dupa mai mult de 120s, facem refresh imediat
+    const elapsed = Date.now() - lastFetchedTimestampRef.current;
+    if (elapsed >= RSI_POLLING_SECONDS * 1000) {
+      pollRsiStatus();
+      setCountdown(RSI_POLLING_SECONDS);
+    }
+
+    countdownTimerRef.current = setInterval(() => {
+      if (isBackgroundedRef.current || !isActive) return;
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          return RSI_POLLING_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    timerRef.current = setInterval(() => {
+      if (isBackgroundedRef.current || !isActive) return;
+      pollRsiStatus();
+    }, RSI_POLLING_SECONDS * 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  }, [isActive, pollRsiStatus]);
+
+  // Gestionare ciclu de viata (Native AppState + Web Visibility API)
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState.match(/inactive|background/)) {
+        isBackgroundedRef.current = true;
+      } else if (nextState === 'active') {
+        const wasBackgrounded = isBackgroundedRef.current;
+        isBackgroundedRef.current = false;
+        if (wasBackgrounded && isActive) {
+          const elapsed = Date.now() - lastFetchedTimestampRef.current;
+          if (elapsed >= RSI_POLLING_SECONDS * 1000) {
+            setCountdown(RSI_POLLING_SECONDS);
+            pollRsiStatus();
+          }
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined') {
+        if (document.hidden) {
+          isBackgroundedRef.current = true;
+        } else {
+          isBackgroundedRef.current = false;
+          if (isActive) {
+            const elapsed = Date.now() - lastFetchedTimestampRef.current;
+            if (elapsed >= RSI_POLLING_SECONDS * 1000) {
+              setCountdown(RSI_POLLING_SECONDS);
+              pollRsiStatus();
+            }
+          }
+        }
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      sub.remove();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [isActive, pollRsiStatus]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -263,8 +385,38 @@ export default function TradingScreen() {
 
       {/* Lista Simboluri Monitorizate Live */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Simboluri Active & RSI Curent</Text>
-        {isLoading && <ActivityIndicator size="small" color={colors.accentBlue} />}
+        <View>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Simboluri Active & RSI Curent</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+            Polling activ la 120s când ești pe pagină
+          </Text>
+        </View>
+
+        <View style={styles.headerRightContainer}>
+          {isLoading || isPolling ? (
+            <View style={styles.pollingStatusRow}>
+              <ActivityIndicator size="small" color={colors.accentBlue} />
+              <Text style={[styles.pollingStatusText, { color: colors.accentBlue }]}>Actualizare...</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.pollingBadge,
+                {
+                  backgroundColor: isBlack ? '#1E293B' : '#E0E7FF',
+                  borderColor: isBlack ? '#334155' : '#C7D2FE',
+                },
+              ]}
+              onPress={pollRsiStatus}
+              activeOpacity={0.7}
+            >
+              <View style={styles.liveDot} />
+              <Text style={[styles.pollingBadgeText, { color: isBlack ? '#818CF8' : '#3730A3' }]}>
+                120s ({countdown}s)
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {rsiResults.map((item) => {
@@ -577,6 +729,43 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pollingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pollingStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  pollingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  pollingBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: 18,

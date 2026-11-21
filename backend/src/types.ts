@@ -247,4 +247,55 @@ export interface YieldCurveStatusResponse {
   warning?: string;
 }
 
+export interface WatchlistSymbolMeta {
+  symbol: string;
+  name?: string;
+  exchange?: string;
+  category?: string;
+  initialPrice?: number;
+  initialChange?: number;
+}
+
+export interface MarketQuote {
+  symbol: string;
+  name?: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  high: number;
+  low: number;
+  open: number;
+  previousClose: number;
+  currency: string;
+  timestamp: number; // unix epoch ms
+  source: 'finnhub' | 'yahoo' | 'cached';
+  cachedAt?: number;
+  stale?: boolean;
+  error?: string;
+}
+
+export interface WatchlistQuotesResponse {
+  timestamp: string;
+  quotes: Record<string, MarketQuote>;
+  total: number;
+}
+
+export interface CandlePoint {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface WatchlistHistoryResponse {
+  symbol: string;
+  currency: string;
+  range: string;
+  interval: string;
+  candles: CandlePoint[];
+  previousClose?: number;
+}
+
 

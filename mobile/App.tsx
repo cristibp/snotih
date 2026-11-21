@@ -2,18 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeScreen from './src/screens/HomeScreen';
+import WatchlistScreen from './src/screens/WatchlistScreen';
 import TradingScreen from './src/screens/TradingScreen';
 import RecessionScreen from './src/screens/RecessionScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
-export type TabType = 'rates' | 'trading' | 'recession';
+export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession';
 export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
 
 function getInitialTab(): TabType {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
-      if (stored === 'rates' || stored === 'trading' || stored === 'recession') {
+      if (
+        stored === 'rates' ||
+        stored === 'watchlist' ||
+        stored === 'trading' ||
+        stored === 'recession'
+      ) {
         return stored;
       }
     }
@@ -33,7 +39,13 @@ function MainApp() {
     (async () => {
       try {
         const storedTab = await AsyncStorage.getItem(TAB_STORAGE_KEY);
-        if (isMounted && (storedTab === 'rates' || storedTab === 'trading' || storedTab === 'recession')) {
+        if (
+          isMounted &&
+          (storedTab === 'rates' ||
+            storedTab === 'watchlist' ||
+            storedTab === 'trading' ||
+            storedTab === 'recession')
+        ) {
           setActiveTabState(storedTab);
         }
       } catch (err) {
@@ -85,6 +97,26 @@ function MainApp() {
                 numberOfLines={1}
               >
                 💶 Curs
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                activeTab === 'watchlist' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+              ]}
+              onPress={() => handleTabPress('watchlist')}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: colors.segmentText },
+                  activeTab === 'watchlist' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                ]}
+                numberOfLines={1}
+              >
+                📊 Watchlist
               </Text>
             </TouchableOpacity>
 
@@ -150,13 +182,18 @@ function MainApp() {
       </View>
 
       <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-        {activeTab === 'rates' ? (
+        <View style={[styles.tabContentPane, { display: activeTab === 'rates' ? 'flex' : 'none' }]}>
           <HomeScreen />
-        ) : activeTab === 'trading' ? (
-          <TradingScreen />
-        ) : (
+        </View>
+        <View style={[styles.tabContentPane, { display: activeTab === 'watchlist' ? 'flex' : 'none' }]}>
+          <WatchlistScreen isActive={activeTab === 'watchlist'} />
+        </View>
+        <View style={[styles.tabContentPane, { display: activeTab === 'trading' ? 'flex' : 'none' }]}>
+          <TradingScreen isActive={activeTab === 'trading'} />
+        </View>
+        <View style={[styles.tabContentPane, { display: activeTab === 'recession' ? 'flex' : 'none' }]}>
           <RecessionScreen />
-        )}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -224,6 +261,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   contentContainer: {
+    flex: 1,
+  },
+  tabContentPane: {
     flex: 1,
   },
 });
