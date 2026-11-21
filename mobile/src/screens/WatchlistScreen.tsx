@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import FavoriteCard from '../components/FavoriteCard';
+import FavoritesBloombergGrid from '../components/FavoritesBloombergGrid';
 import FavoritesComparisonChart from '../components/FavoritesComparisonChart';
 import FavoritesSetupModal from '../components/FavoritesSetupModal';
 import PollingDropdown from '../components/PollingDropdown';
@@ -18,10 +19,13 @@ interface WatchlistScreenProps {
   isActive?: boolean;
 }
 
+type ViewMode = 'detail' | 'grid' | 'compare';
+
 export default function WatchlistScreen({ isActive = true }: WatchlistScreenProps) {
   const { colors, isBlack } = useTheme();
   const [setupModalVisible, setSetupModalVisible] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'detail' | 'compare'>('detail');
+  const [viewMode, setViewMode] = useState<ViewMode>('detail');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   const {
     pollingInterval,
@@ -44,89 +48,121 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
       {/* 2-Column Split Landscape Layout (800x420) */}
       <View style={styles.contentRow}>
         {/* Left Column: Favorites Sidebar (240px) */}
-        <View style={styles.leftColumn}>
-          <View style={styles.sidebarHeader}>
-            <View style={styles.sidebarTitleRow}>
-              <Text style={[styles.sidebarTitle, { color: colors.text }]}>Favorite</Text>
-              <Text style={[styles.sidebarCount, { color: colors.textMuted }]}>
-                ({favorites.length})
+        {!isSidebarCollapsed && (
+          <View style={styles.leftColumn}>
+            <View style={styles.sidebarHeader}>
+              <View style={styles.sidebarTitleRow}>
+                <Text style={[styles.sidebarTitle, { color: colors.text }]}>Favorite</Text>
+                <Text style={[styles.sidebarCount, { color: colors.textMuted }]}>
+                  ({favorites.length})
+                </Text>
+              </View>
+              <View style={styles.sidebarActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.setupIconBtn,
+                    viewMode === 'grid' && { backgroundColor: isBlack ? '#334155' : '#E2E8F0', borderColor: '#3B82F6' },
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : colors.card,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => setViewMode(viewMode === 'grid' ? 'detail' : 'grid')}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Comuta afisare multi-grafic favorite stil Bloomberg"
+                >
+                  <Text style={styles.setupIconText}>▦</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.setupIconBtn,
+                    viewMode === 'compare' && { backgroundColor: isBlack ? '#334155' : '#E2E8F0', borderColor: '#3B82F6' },
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : colors.card,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => setViewMode(viewMode === 'compare' ? 'detail' : 'compare')}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Comuta grafic comparativ favorite"
+                >
+                  <Text style={styles.setupIconText}>📊</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.setupIconBtn,
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : colors.card,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => setSetupModalVisible(true)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Configurare favorite"
+                >
+                  <Text style={styles.setupIconText}>⚙️</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Cards List */}
+            <View style={styles.cardsContainer}>
+              {favorites.map((sym) => (
+                <FavoriteCard
+                  key={sym}
+                  symbol={sym}
+                  quote={quotes[sym]}
+                  isSelected={selectedSymbol === sym && viewMode === 'detail'}
+                  onSelect={(selected) => {
+                    setSelectedSymbol(selected);
+                    setViewMode('detail');
+                  }}
+                />
+              ))}
+            </View>
+
+            {/* Bottom Setup Button */}
+            <TouchableOpacity
+              style={[
+                styles.addFavBtn,
+                {
+                  backgroundColor: isBlack ? '#1E293B' : colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              onPress={() => setSetupModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.addFavText, { color: '#3B82F6' }]}>
+                + Configurare ({favorites.length})
               </Text>
-            </View>
-            <View style={styles.sidebarActions}>
-              <TouchableOpacity
-                style={[
-                  styles.setupIconBtn,
-                  viewMode === 'compare' && { backgroundColor: isBlack ? '#334155' : '#E2E8F0', borderColor: '#3B82F6' },
-                  {
-                    backgroundColor: isBlack ? '#1E293B' : colors.card,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                onPress={() => setViewMode(viewMode === 'compare' ? 'detail' : 'compare')}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Comuta grafic comparativ favorite"
-              >
-                <Text style={styles.setupIconText}>📊</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.setupIconBtn,
-                  {
-                    backgroundColor: isBlack ? '#1E293B' : colors.card,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                onPress={() => setSetupModalVisible(true)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Configurare favorite"
-              >
-                <Text style={styles.setupIconText}>⚙️</Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           </View>
-
-          {/* Cards List */}
-          <View style={styles.cardsContainer}>
-            {favorites.map((sym) => (
-              <FavoriteCard
-                key={sym}
-                symbol={sym}
-                quote={quotes[sym]}
-                isSelected={selectedSymbol === sym && viewMode === 'detail'}
-                onSelect={(selected) => {
-                  setSelectedSymbol(selected);
-                  setViewMode('detail');
-                }}
-              />
-            ))}
-          </View>
-
-          {/* Bottom Setup Button */}
-          <TouchableOpacity
-            style={[
-              styles.addFavBtn,
-              {
-                backgroundColor: isBlack ? '#1E293B' : colors.card,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-            onPress={() => setSetupModalVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.addFavText, { color: '#3B82F6' }]}>
-              + Configurare ({favorites.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
+        )}
 
         {/* Right Column: Chart & Metrics Panel */}
         <View style={styles.rightColumn}>
           {/* Header Bar with Polling Dropdown & View Mode Switcher */}
           <View style={styles.topRightBar}>
             <View style={styles.viewModeTabs}>
+              {isSidebarCollapsed && (
+                <TouchableOpacity
+                  style={[
+                    styles.restoreSidebarBtn,
+                    { backgroundColor: isBlack ? '#1E293B' : colors.card, borderColor: colors.cardBorder },
+                  ]}
+                  onPress={() => setIsSidebarCollapsed(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.restoreSidebarText, { color: colors.text }]}>⇤ Favorite</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={[
                   styles.viewModeTab,
@@ -154,6 +190,30 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
               <TouchableOpacity
                 style={[
                   styles.viewModeTab,
+                  viewMode === 'grid' && [
+                    styles.viewModeTabActive,
+                    { backgroundColor: isBlack ? '#1E293B' : '#FFFFFF' },
+                  ],
+                ]}
+                onPress={() => setViewMode('grid')}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.viewModeTabText,
+                    {
+                      color: viewMode === 'grid' ? '#3B82F6' : colors.textMuted,
+                      fontWeight: viewMode === 'grid' ? '700' : '500',
+                    },
+                  ]}
+                >
+                  ▦ Multi-Grafic ({favorites.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.viewModeTab,
                   viewMode === 'compare' && [
                     styles.viewModeTabActive,
                     { backgroundColor: isBlack ? '#1E293B' : '#FFFFFF' },
@@ -171,7 +231,7 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
                     },
                   ]}
                 >
-                  📊 Comparație Favorite
+                  📊 Comparație
                 </Text>
               </TouchableOpacity>
             </View>
@@ -202,6 +262,17 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
                 setSelectedSymbol(sym);
                 setViewMode('detail');
               }}
+            />
+          ) : viewMode === 'grid' ? (
+            <FavoritesBloombergGrid
+              favorites={favorites}
+              quotes={quotes}
+              onSelectSymbol={(sym) => {
+                setSelectedSymbol(sym);
+                setViewMode('detail');
+              }}
+              isSidebarCollapsed={isSidebarCollapsed}
+              onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             />
           ) : selectedSymbol ? (
             <WatchlistChart
@@ -312,6 +383,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(150, 150, 150, 0.12)',
     padding: 2,
     gap: 3,
+  },
+  restoreSidebarBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    marginRight: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restoreSidebarText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   viewModeTab: {
     paddingHorizontal: 8,

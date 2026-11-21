@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MarketQuote } from '../api/types';
+import Svg, { Path } from 'react-native-svg';
+import { CandlePoint, MarketQuote } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
 
 interface FavoriteCardProps {
@@ -8,6 +9,7 @@ interface FavoriteCardProps {
   quote?: MarketQuote;
   isSelected: boolean;
   onSelect: (symbol: string) => void;
+  candles?: CandlePoint[];
 }
 
 export default function FavoriteCard({
@@ -15,6 +17,7 @@ export default function FavoriteCard({
   quote,
   isSelected,
   onSelect,
+  candles,
 }: FavoriteCardProps) {
   const { colors, isBlack } = useTheme();
 
@@ -43,6 +46,25 @@ export default function FavoriteCard({
   const rangePercent = hasRange
     ? Math.min(100, Math.max(0, ((price - dayLow) / (dayHigh - dayLow)) * 100))
     : 50;
+
+  const sparklinePath = useMemo(() => {
+    if (!candles || candles.length < 2) return '';
+    const values = candles.map((c) => c.close);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    if (min === max) {
+      min *= 0.99;
+      max *= 1.01;
+    }
+    const width = 110;
+    const height = 12;
+    const pts = candles.map((c, i) => {
+      const x = (i / (candles.length - 1)) * width;
+      const y = height - ((c.close - min) / (max - min)) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return `M ${pts.join(' L ')}`;
+  }, [candles]);
 
   return (
     <TouchableOpacity
@@ -86,8 +108,24 @@ export default function FavoriteCard({
         </Text>
       </View>
 
-      {/* Mini graphical price-range bar for favorite */}
-      {hasRange && (
+      {/* Mini graphical price-range bar or sparkline for favorite */}
+      {sparklinePath ? (
+        <View style={styles.miniSparklineContainer}>
+          <Svg width={110} height={12}>
+            <Path
+              d={sparklinePath}
+              fill="none"
+              stroke={changeColor}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+          <Text style={[styles.rangeBoundText, { color: colors.textMuted }]}>
+            {dayLow > 0 && dayHigh > 0 ? `${dayLow.toFixed(0)}-${dayHigh.toFixed(0)}` : ''}
+          </Text>
+        </View>
+      ) : hasRange ? (
         <View style={styles.miniRangeContainer}>
           <Text style={[styles.rangeBoundText, { color: colors.textMuted }]}>
             {dayLow.toFixed(1)}
@@ -116,7 +154,7 @@ export default function FavoriteCard({
             {dayHigh.toFixed(1)}
           </Text>
         </View>
-      )}
+      ) : null}
 
       <View style={styles.bottomRow}>
         <Text style={[styles.nameText, { color: colors.textMuted }]} numberOfLines={1}>
@@ -177,6 +215,12 @@ const styles = StyleSheet.create({
   priceText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  miniSparklineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 1,
   },
   miniRangeContainer: {
     flexDirection: 'row',
