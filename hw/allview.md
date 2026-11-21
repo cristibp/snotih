@@ -1,4 +1,5 @@
-# Install APK 
+# Install APK  https://www.apkmirror.com/apk/mozilla/firefox/firefox-68-11-0-release/firefox-browser-fast-private-68-11-0-android-apk-download/download/?key=a4365f2880947c148d650c765567988b695dfce5
+
 adb install -r firefox-68.11.0-armeabi-v7a.apk
 
 # Servicii și magazin Google
