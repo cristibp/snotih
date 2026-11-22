@@ -13,13 +13,13 @@ import {
   View,
 } from 'react-native';
 import {
-  fetchRsiStatus,
-  fetchRsiSymbols,
-  resetRsiSymbols,
-  triggerRsiCheck,
-  updateRsiSymbols,
+  fetchAlertsStatus,
+  fetchAlertSymbols,
+  resetAlertSymbols,
+  triggerAlertsCheck,
+  updateAlertSymbols,
 } from '../api/client';
-import { RsiCheckResponse, RsiSymbolResult, RsiSymbolsConfig } from '../api/types';
+import { AlertCheckResponse, AlertsStatusResponse, RsiSymbolResult, RsiSymbolsConfig, VixAlertResult } from '../api/types';
 import buildInfo from '../constants/buildInfo.json';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -34,14 +34,15 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
   const { colors, isBlack } = useTheme();
   const [config, setConfig] = useState<RsiSymbolsConfig | null>(null);
   const [rsiResults, setRsiResults] = useState<RsiSymbolResult[]>([]);
+  const [vixResult, setVixResult] = useState<VixAlertResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [lastCheckResponse, setLastCheckResponse] = useState<RsiCheckResponse | null>(null);
+  const [lastCheckResponse, setLastCheckResponse] = useState<AlertCheckResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Polling RSI la 120 secunde cand utilizatorul se afla pe pagina
+  // Polling alerte la 120 secunde cand utilizatorul se afla pe pagina
   const [countdown, setCountdown] = useState<number>(RSI_POLLING_SECONDS);
   const [isPolling, setIsPolling] = useState<boolean>(false);
   const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
@@ -59,34 +60,40 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
     setErrorMessage(null);
     try {
       const [symbolsData, statusData] = await Promise.all([
-        fetchRsiSymbols(),
-        fetchRsiStatus(),
+        fetchAlertSymbols(),
+        fetchAlertsStatus(),
       ]);
       setConfig(symbolsData);
       setSymbolChips(symbolsData.symbols);
       setRsiResults(statusData.results);
+      if (statusData.vix) {
+        setVixResult(statusData.vix);
+      }
       setLastPolledAt(new Date());
       lastFetchedTimestampRef.current = Date.now();
       setCountdown(RSI_POLLING_SECONDS);
     } catch (err: any) {
-      console.error('Eroare la incarcarea datelor RSI:', err);
-      setErrorMessage(err?.message || 'Nu s-au putut încărca datele RSI.');
+      console.error('Eroare la incarcarea datelor de alerte:', err);
+      setErrorMessage(err?.message || 'Nu s-au putut încărca datele de alerte.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  // Functie de polling pentru actualizarea periodica a valorilor RSI
+  // Functie de polling pentru actualizarea periodica a valorilor RSI si VIX
   const pollRsiStatus = useCallback(async () => {
     setIsPolling(true);
     try {
-      const statusData = await fetchRsiStatus();
+      const statusData = await fetchAlertsStatus();
       setRsiResults(statusData.results);
+      if (statusData.vix) {
+        setVixResult(statusData.vix);
+      }
       setLastPolledAt(new Date());
       lastFetchedTimestampRef.current = Date.now();
     } catch (err: any) {
-      console.warn('Eroare la polling RSI status:', err);
+      console.warn('Eroare la polling alerte status:', err);
     } finally {
       setIsPolling(false);
     }
@@ -217,13 +224,14 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      const updatedConfig = await updateRsiSymbols(symbolChips);
+      const updatedConfig = await updateAlertSymbols(symbolChips);
       setConfig(updatedConfig);
       setSymbolChips(updatedConfig.symbols);
 
-      // Reincarcam valorile RSI dupa actualizarea listei
-      const statusData = await fetchRsiStatus();
+      // Reincarcam valorile dupa actualizarea listei
+      const statusData = await fetchAlertsStatus();
       setRsiResults(statusData.results);
+      if (statusData.vix) setVixResult(statusData.vix);
 
       Alert.alert('Succes', 'Lista de simboluri a fost salvată pe server.');
     } catch (err: any) {
@@ -238,12 +246,13 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      const resetConfig = await resetRsiSymbols();
+      const resetConfig = await resetAlertSymbols();
       setConfig(resetConfig);
       setSymbolChips(resetConfig.symbols);
 
-      const statusData = await fetchRsiStatus();
+      const statusData = await fetchAlertsStatus();
       setRsiResults(statusData.results);
+      if (statusData.vix) setVixResult(statusData.vix);
 
       Alert.alert('Resetat', 'Lista a fost resetată la valorile implicite din variabilele de mediu.');
     } catch (err: any) {
@@ -258,12 +267,13 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
     setIsChecking(true);
     setErrorMessage(null);
     try {
-      const checkRes = await triggerRsiCheck();
+      const checkRes = await triggerAlertsCheck();
       setLastCheckResponse(checkRes);
       setRsiResults(checkRes.results);
+      if (checkRes.vix) setVixResult(checkRes.vix);
     } catch (err: any) {
-      console.error('Eroare la verificarea RSI:', err);
-      setErrorMessage(err?.message || 'Verificarea RSI a eșuat.');
+      console.error('Eroare la verificarea alertelor:', err);
+      setErrorMessage(err?.message || 'Verificarea alertelor a eșuat.');
     } finally {
       setIsChecking(false);
     }
@@ -283,14 +293,24 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
     return { label: '🟢 RSI > 40 (Normal)', color: colors.tierOversoldText, bg: colors.tierOversoldBg };
   };
 
+  // Nivel VIX procentual pentru bara vizuala (0-50 puncte)
+  const vixPercent = vixResult ? Math.min(100, Math.max(0, (vixResult.currentPrice / 50) * 100)) : 0;
+  const vixBarColor = vixResult
+    ? vixResult.thresholdSurpassed || vixResult.currentPrice > 35
+      ? colors.danger
+      : vixResult.currentPrice > 20
+        ? colors.tierBearishText
+        : colors.success
+    : colors.textMuted;
+
   return (
     <ScrollView
       contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accentBlue} />}
     >
-      <Text style={[styles.title, { color: colors.text }]}>Monitorizare RSI</Text>
+      <Text style={[styles.title, { color: colors.text }]}>Monitorizare Alerte</Text>
       <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-        Alerte automate pe canalul <Text style={[styles.boldText, { color: colors.text }]}>#trading</Text> la atingerea pragurilor RSI
+        Alerte automate pe canalul <Text style={[styles.boldText, { color: colors.text }]}>#trading</Text> la atingerea pragurilor RSI sau volatilitate extremă VIX
       </Text>
 
       {/* Legenda Praguri Alerta */}
@@ -315,6 +335,9 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
           <View style={[styles.legendPill, { backgroundColor: colors.tierOverboughtBg }]}>
             <Text style={[styles.legendPillText, { color: colors.tierOverboughtText }]}>🔴 RSI ≤ 30 (Roșu)</Text>
           </View>
+          <View style={[styles.legendPill, { backgroundColor: isBlack ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' }]}>
+            <Text style={[styles.legendPillText, { color: isBlack ? '#FCA5A5' : '#B91C1C' }]}>⚡ VIX: Creștere ≥ 20% sau &gt; 35</Text>
+          </View>
         </View>
       </View>
 
@@ -338,7 +361,7 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
           {isChecking ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryButtonText}>🚀 Verifică RSI & Trimite Alerte (#trading)</Text>
+            <Text style={styles.primaryButtonText}>🚀 Verifică Alerte & Trimite (#trading)</Text>
           )}
         </TouchableOpacity>
 
@@ -354,10 +377,11 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
           >
             <Text style={[styles.responseTitle, { color: colors.responseTitle }]}>Rezultat Verificare:</Text>
             <Text style={[styles.responseText, { color: colors.responseText }]}>
-              • Total verificate: <Text style={[styles.boldText, { color: colors.text }]}>{lastCheckResponse.totalChecked}</Text>
+              • Total verificate: <Text style={[styles.boldText, { color: colors.text }]}>{lastCheckResponse.totalChecked}</Text> (RSI + VIX)
             </Text>
             <Text style={[styles.responseText, { color: colors.responseText }]}>
               • Alerte declanșate: <Text style={[styles.boldText, { color: colors.text }]}>{lastCheckResponse.totalTriggered}</Text>
+              {lastCheckResponse.vix?.thresholdSurpassed ? ' (inclusiv VIX)' : ''}
             </Text>
             <Text style={[styles.responseText, { color: colors.responseText }]}>
               • Discord (#trading):{' '}
@@ -383,10 +407,156 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
         </View>
       )}
 
-      {/* Lista Simboluri Monitorizate Live */}
+      {/* ─── Card Volatilitate VIX ─── */}
       <View style={styles.sectionHeaderRow}>
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Simboluri Active & RSI Curent</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Volatilitate Piață (VIX)</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+            Alertă la creștere ≥ +20% sau nivel &gt; 35 orar
+          </Text>
+        </View>
+      </View>
+
+      {vixResult && (
+        <View
+          style={[
+            styles.vixCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: vixResult.thresholdSurpassed ? colors.danger : colors.cardBorder,
+              borderWidth: vixResult.thresholdSurpassed ? 2 : (isBlack ? 1 : 0),
+            },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <View>
+              <View style={styles.vixTitleRow}>
+                <Text style={[styles.symbolCode, { color: colors.text }]}>{vixResult.symbol}</Text>
+                {vixResult.thresholdSurpassed && (
+                  <View style={[styles.vixAlertPill, { backgroundColor: isBlack ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2' }]}>
+                    <Text style={[styles.vixAlertPillText, { color: isBlack ? '#FCA5A5' : '#B91C1C' }]}>
+                      🚨 ALERTĂ ACTIVĂ
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.symbolName, { color: colors.textMuted }]} numberOfLines={1}>
+                {vixResult.name}
+              </Text>
+            </View>
+
+            <View style={styles.priceContainer}>
+              <Text style={[styles.priceText, { color: colors.text }]}>
+                {vixResult.currentPrice > 0 ? vixResult.currentPrice.toFixed(2) : 'N/A'}
+              </Text>
+              <View
+                style={[
+                  styles.tierBadge,
+                  {
+                    backgroundColor: vixResult.thresholdSurpassed
+                      ? colors.tierOverboughtBg
+                      : colors.tierOversoldBg,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tierBadgeText,
+                    {
+                      color: vixResult.thresholdSurpassed
+                        ? colors.tierOverboughtText
+                        : colors.tierOversoldText,
+                    },
+                  ]}
+                >
+                  {vixResult.thresholdSurpassed ? '🔴 Critic (>35 sau +20%)' : '🟢 Normal (≤35)'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Metric Chips Row */}
+          <View style={styles.vixMetricsRow}>
+            <View style={[styles.vixMetricChip, { backgroundColor: colors.chipBackground, borderColor: colors.chipBorder }]}>
+              <Text style={[styles.vixMetricLabel, { color: colors.textMuted }]}>Variație Zi</Text>
+              <Text
+                style={[
+                  styles.vixMetricValue,
+                  { color: vixResult.changePercent >= 20 ? colors.danger : (vixResult.changePercent >= 0 ? colors.tierBearishText : colors.success) },
+                ]}
+              >
+                {vixResult.changePercent >= 0 ? '+' : ''}{vixResult.changePercent.toFixed(2)}%
+              </Text>
+            </View>
+
+            <View style={[styles.vixMetricChip, { backgroundColor: colors.chipBackground, borderColor: colors.chipBorder }]}>
+              <Text style={[styles.vixMetricLabel, { color: colors.textMuted }]}>Variație 1h</Text>
+              <Text
+                style={[
+                  styles.vixMetricValue,
+                  {
+                    color:
+                      vixResult.hourlyChangePercent !== undefined && vixResult.hourlyChangePercent >= 20
+                        ? colors.danger
+                        : (vixResult.hourlyChangePercent !== undefined && vixResult.hourlyChangePercent > 0
+                          ? colors.tierBearishText
+                          : colors.text),
+                  },
+                ]}
+              >
+                {vixResult.hourlyChangePercent !== undefined
+                  ? `${vixResult.hourlyChangePercent >= 0 ? '+' : ''}${vixResult.hourlyChangePercent.toFixed(2)}%`
+                  : 'N/A'}
+              </Text>
+            </View>
+
+            <View style={[styles.vixMetricChip, { backgroundColor: colors.chipBackground, borderColor: colors.chipBorder }]}>
+              <Text style={[styles.vixMetricLabel, { color: colors.textMuted }]}>Închidere Prec.</Text>
+              <Text style={[styles.vixMetricValue, { color: colors.text }]}>
+                {vixResult.previousClose > 0 ? vixResult.previousClose.toFixed(2) : 'N/A'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Bara vizuala VIX */}
+          <View style={styles.rsiBarContainer}>
+            <View style={styles.rsiBarLabels}>
+              <Text style={[styles.rsiLabelText, { color: colors.textMuted }]}>Nivel VIX (0-50+):</Text>
+              <Text style={[styles.rsiValueText, { color: vixBarColor }]}>
+                {vixResult.currentPrice > 0 ? vixResult.currentPrice.toFixed(2) : 'N/A'}
+              </Text>
+            </View>
+            <View style={[styles.progressBarBackground, { backgroundColor: colors.progressBarBg }]}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: `${vixPercent}%`,
+                    backgroundColor: vixBarColor,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+
+          {vixResult.thresholdSurpassed && vixResult.reasons.length > 0 ? (
+            <View style={[styles.vixWarningBox, { backgroundColor: isBlack ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2' }]}>
+              {vixResult.reasons.map((r, idx) => (
+                <Text key={idx} style={[styles.vixWarningText, { color: isBlack ? '#FCA5A5' : '#B91C1C' }]}>
+                  ⚠️ {r}
+                </Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.cardMessage, { color: colors.textMuted }]}>{vixResult.message}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Lista Simboluri RSI Monitorizate Live */}
+      <View style={[styles.sectionHeaderRow, { marginTop: 8 }]}>
+        <View>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Simboluri ETF & RSI Curent</Text>
           <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
             Polling activ la 120s când ești pe pagină
           </Text>
@@ -491,7 +661,7 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
         ]}
       >
         <View style={styles.configHeaderRow}>
-          <Text style={[styles.configTitle, { color: colors.text }]}>⚙️ Configurare Watchlist</Text>
+          <Text style={[styles.configTitle, { color: colors.text }]}>⚙️ Configurare Watchlist RSI</Text>
           <View
             style={[
               styles.statusChip,
@@ -772,6 +942,63 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
   },
+  vixCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  vixTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  vixAlertPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  vixAlertPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  vixMetricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  vixMetricChip: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  vixMetricLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  vixMetricValue: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  vixWarningBox: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    gap: 4,
+  },
+  vixWarningText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   symbolCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
@@ -998,3 +1225,5 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+
+

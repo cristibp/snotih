@@ -157,7 +157,7 @@ function MainApp() {
                     ]}
                     numberOfLines={1}
                   >
-                    📈 RSI
+                    🚨 Alerte
                   </Text>
                 </TouchableOpacity>
 

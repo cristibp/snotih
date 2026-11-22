@@ -5,6 +5,8 @@ import {
   RsiCheckResponse,
   RsiStatusResponse,
   RsiSymbolsConfig,
+  AlertCheckResponse,
+  AlertsStatusResponse,
   BnrPredictorResult,
   IntradayAverageResult,
   MoneyMarketData,
@@ -61,82 +63,112 @@ export async function registerPushToken(token: string): Promise<void> {
 }
 
 /**
- * Preia configuratia curenta de simboluri RSI (active, suprascrise, default).
+ * Preia configuratia curenta de simboluri (active, suprascrise, default).
  */
-export async function fetchRsiSymbols(): Promise<RsiSymbolsConfig> {
-  const response = await fetch(`${API_BASE_URL}/api/rsi/symbols`);
+export async function fetchAlertSymbols(): Promise<RsiSymbolsConfig> {
+  const response = await fetch(`${API_BASE_URL}/api/alerts/symbols`);
 
   if (!response.ok) {
-    throw new Error(`Eroare la preluarea simbolurilor (status ${response.status})`);
+    const fallback = await fetch(`${API_BASE_URL}/api/rsi/symbols`);
+    if (!fallback.ok) {
+      throw new Error(`Eroare la preluarea simbolurilor (status ${response.status})`);
+    }
+    return (await fallback.json()) as RsiSymbolsConfig;
   }
 
   return (await response.json()) as RsiSymbolsConfig;
 }
+export const fetchRsiSymbols = fetchAlertSymbols;
 
 /**
- * Suprascrie lista de simboluri RSI din frontend.
+ * Suprascrie lista de simboluri din frontend.
  */
-export async function updateRsiSymbols(symbols: string[]): Promise<RsiSymbolsConfig> {
-  const response = await fetch(`${API_BASE_URL}/api/rsi/symbols`, {
+export async function updateAlertSymbols(symbols: string[]): Promise<RsiSymbolsConfig> {
+  let response = await fetch(`${API_BASE_URL}/api/alerts/symbols`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ symbols }),
   });
 
   if (!response.ok) {
-    throw new Error(`Eroare la salvarea simbolurilor (status ${response.status})`);
+    response = await fetch(`${API_BASE_URL}/api/rsi/symbols`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols }),
+    });
+    if (!response.ok) {
+      throw new Error(`Eroare la salvarea simbolurilor (status ${response.status})`);
+    }
   }
 
   const data = await response.json();
   return data.config as RsiSymbolsConfig;
 }
+export const updateRsiSymbols = updateAlertSymbols;
 
 /**
  * Reseteaza lista de simboluri la valorile default din variabilele de mediu.
  */
-export async function resetRsiSymbols(): Promise<RsiSymbolsConfig> {
-  const response = await fetch(`${API_BASE_URL}/api/rsi/symbols/reset`, {
+export async function resetAlertSymbols(): Promise<RsiSymbolsConfig> {
+  let response = await fetch(`${API_BASE_URL}/api/alerts/symbols/reset`, {
     method: 'POST',
   });
 
   if (!response.ok) {
-    throw new Error(`Eroare la resetarea simbolurilor (status ${response.status})`);
+    response = await fetch(`${API_BASE_URL}/api/rsi/symbols/reset`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error(`Eroare la resetarea simbolurilor (status ${response.status})`);
+    }
   }
 
   const data = await response.json();
   return data.config as RsiSymbolsConfig;
 }
+export const resetRsiSymbols = resetAlertSymbols;
 
 /**
- * Preia starea curenta a indicatorilor RSI pentru lista activa de simboluri (fara alerte Discord).
+ * Preia starea curenta a alertelor (RSI + VIX, fara notificari Discord).
  */
-export async function fetchRsiStatus(): Promise<RsiStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/rsi/status`);
+export async function fetchAlertsStatus(): Promise<AlertsStatusResponse> {
+  let response = await fetch(`${API_BASE_URL}/api/alerts/status`);
 
   if (!response.ok) {
-    throw new Error(`Eroare la preluarea valorilor RSI (status ${response.status})`);
+    response = await fetch(`${API_BASE_URL}/api/rsi/status`);
+    if (!response.ok) {
+      throw new Error(`Eroare la preluarea stării alertelor (status ${response.status})`);
+    }
   }
 
-  return (await response.json()) as RsiStatusResponse;
+  return (await response.json()) as AlertsStatusResponse;
 }
+export const fetchRsiStatus = fetchAlertsStatus;
 
 /**
- * Declanșează verificarea RSI și trimiterea alertelor Discord către #trading.
+ * Declanșează verificarea alertelor (RSI + VIX) și trimiterea notificărilor Discord către #trading.
  */
-export async function triggerRsiCheck(webhookUrl?: string): Promise<RsiCheckResponse> {
-  const url = `${API_BASE_URL}/api/rsi/check`;
-  const response = await fetch(url, {
+export async function triggerAlertsCheck(webhookUrl?: string): Promise<AlertCheckResponse> {
+  let response = await fetch(`${API_BASE_URL}/api/alerts/check`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(webhookUrl ? { webhookUrl } : {}),
   });
 
   if (!response.ok) {
-    throw new Error(`Eroare la rularea verificarii RSI (status ${response.status})`);
+    response = await fetch(`${API_BASE_URL}/api/rsi/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhookUrl ? { webhookUrl } : {}),
+    });
+    if (!response.ok) {
+      throw new Error(`Eroare la rularea verificării de alerte (status ${response.status})`);
+    }
   }
 
-  return (await response.json()) as RsiCheckResponse;
+  return (await response.json()) as AlertCheckResponse;
 }
+export const triggerRsiCheck = triggerAlertsCheck;
 
 /**
  * Preia predictia curenta pentru cursul BNR de la ora 13:00.

@@ -105,11 +105,11 @@ Scaneaza codul QR cu aplicatia **Expo Go** de pe telefon pentru a testa rapid.
 | POST   | `/api/register-token`  | Inregistreaza un ExpoPushToken pentru notificari                  |
 | GET    | `/api/fetch-rates`     | Trigger protejat prin secret; actualizeaza toate datele de mai sus, apelat de Cron-Job.org |
 | GET    | `/api/backfill-month`  | Trigger manual protejat prin secret; extrage datele lipsa pentru luna curenta |
-| GET    | `/api/rsi/status`      | Returneaza valorile RSI curente si preturile pentru lista activa de simboluri |
-| GET/POST | `/api/rsi/check`     | Verifica RSI si trimite alerte Discord pe `#trading` pentru RSI <= 40 (🔵 <=40, 🟠 <=35, 🔴 <=30) |
-| GET    | `/api/rsi/symbols`     | Returneaza configuratia curenta de simboluri (active, suprascrise, default) |
-| POST   | `/api/rsi/symbols`     | Suprascrie lista de simboluri din frontend |
-| POST   | `/api/rsi/symbols/reset` | Reseteaza lista de simboluri la valorile default din `.env` |
+| GET    | `/api/alerts/status` (sau `/api/rsi/status`) | Returnează valorile RSI curente pentru lista activă de simboluri și statusul VIX |
+| GET/POST | `/api/alerts/check` (sau `/api/rsi/check`) | Verifică alerte RSI (≤ 40) și VIX (creștere orară/zilnică ≥ 20% sau nivel > 35) și trimite alerte Discord pe `#trading` |
+| GET    | `/api/alerts/symbols` (sau `/api/rsi/symbols`) | Returnează configurația curentă de simboluri (active, suprascrise, default) |
+| POST   | `/api/alerts/symbols` (sau `/api/rsi/symbols`) | Suprascrie lista de simboluri din frontend |
+| POST   | `/api/alerts/symbols/reset` (sau `/api/rsi/symbols/reset`) | Resetează lista de simboluri la valorile default din `.env` |
 | GET    | `/api/prediction`      | Returneaza predictia cursului BNR de la 13:00 (EUR/PLN, EUR/HUF 09:00-11:30, EUR/USD overnight, ROBOR/IRCC) |
 | GET    | `/api/intraday-average` | Returneaza media sesiunii interbancare RON / EUR (13:00 precedent -> 09:00 azi) |
 | GET    | `/api/money-market`    | Returneaza ROBOR (3M, 6M, 1M, O/N), IRCC si starea lichiditatii monetare BNR |

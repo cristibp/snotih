@@ -21,6 +21,7 @@ import { sendPushToAll } from './services/pushService';
 import { backfillCurrentMonthIfNeeded, backfill10YearsIfNeeded } from './services/backfillService';
 import {
   checkAllSymbolsRsi,
+  checkVixAlert,
   sendTradingDiscordAlert,
   formatDiscordWebhookRequest,
 } from './services/rsiService';
@@ -46,7 +47,7 @@ import {
   sendGlobalSignalsDiscordAlert,
   startGlobalSignalsScheduler,
 } from './services/globalSignalsService';
-import { ExchangeRates, RsiCheckResponse } from './types';
+import { ExchangeRates, RsiCheckResponse, AlertCheckResponse, AlertsStatusResponse } from './types';
 import { authRouter, requireAuth } from './routes/authRoutes';
 import { emailRoleStore } from './services/emailRoleStore';
 
@@ -779,30 +780,76 @@ app.post('/api/rsi/symbols/reset', (_req, res) => {
 });
 
 /**
- * GET /api/rsi/status
- * Returneaza valorile RSI curente si preturile pentru simbolurile active, fara notificari pe Discord.
+ * GET /api/alerts/symbols & GET /api/rsi/symbols
+ * Returneaza configuratia curenta de simboluri (active, suprascrise, si default din env).
  */
-app.get('/api/rsi/status', async (_req, res) => {
+const handleGetAlertSymbols = (_req: express.Request, res: express.Response) => {
+  const config = getRsiSymbolsConfig();
+  return res.json(config);
+};
+app.get('/api/alerts/symbols', handleGetAlertSymbols);
+app.get('/api/rsi/symbols', handleGetAlertSymbols);
+
+/**
+ * POST /api/alerts/symbols & POST /api/rsi/symbols
+ * Suprascrie lista de simboluri din frontend.
+ * Body: { symbols: string[] }
+ */
+const handleSaveAlertSymbols = (req: express.Request, res: express.Response) => {
+  const { symbols } = req.body ?? {};
+  if (!symbols || !Array.isArray(symbols)) {
+    return res.status(400).json({ error: 'Campul "symbols" (array de string-uri) este obligatoriu.' });
+  }
+
+  const updatedConfig = saveRsiSymbols(symbols);
+  return res.json({ success: true, config: updatedConfig });
+};
+app.post('/api/alerts/symbols', handleSaveAlertSymbols);
+app.post('/api/rsi/symbols', handleSaveAlertSymbols);
+
+/**
+ * POST /api/alerts/symbols/reset & POST /api/rsi/symbols/reset
+ * Reseteaza lista de simboluri la valorile implicite din variabilele de mediu.
+ */
+const handleResetAlertSymbols = (_req: express.Request, res: express.Response) => {
+  const resetConfig = resetRsiSymbols();
+  return res.json({ success: true, config: resetConfig });
+};
+app.post('/api/alerts/symbols/reset', handleResetAlertSymbols);
+app.post('/api/rsi/symbols/reset', handleResetAlertSymbols);
+
+/**
+ * GET /api/alerts/status & GET /api/rsi/status
+ * Returneaza valorile RSI curente si statutul VIX, fara notificari pe Discord.
+ */
+const handleAlertsStatus = async (_req: express.Request, res: express.Response) => {
   try {
     const config = getRsiSymbolsConfig();
-    const results = await checkAllSymbolsRsi(config.symbols);
-    return res.json({
+    const [results, vixResult] = await Promise.all([
+      checkAllSymbolsRsi(config.symbols),
+      checkVixAlert(),
+    ]);
+    const responsePayload: AlertsStatusResponse = {
       timestamp: new Date().toISOString(),
       config,
       results,
-    });
+      vix: vixResult,
+    };
+    return res.json(responsePayload);
   } catch (err: any) {
-    console.error('Eroare in /api/rsi/status:', err?.message || err);
-    return res.status(500).json({ error: 'RSI_STATUS_ERROR', details: err?.message || String(err) });
+    console.error('Eroare in /api/alerts/status:', err?.message || err);
+    return res.status(500).json({ error: 'ALERTS_STATUS_ERROR', details: err?.message || String(err) });
   }
-});
+};
+app.get('/api/alerts/status', handleAlertsStatus);
+app.get('/api/rsi/status', handleAlertsStatus);
 
 /**
- * GET /api/rsi/check & POST /api/rsi/check
- * Verifica RSI pentru simbolurile configurate (sau primite in request).
- * Daca RSI <= 40 (Albastru <=40, Portocaliu <=35, Rosu <=30), trimite notificare pe Discord in canalul #trading.
+ * GET/POST /api/alerts/check & GET/POST /api/rsi/check
+ * Verifica RSI pentru simbolurile configurate (sau primite in request) si VIX.
+ * Daca RSI <= 40 sau VIX creste cu >= 20% ori depaseste 35, trimite notificare pe Discord in canalul #trading.
  */
-const handleRsiCheck = async (req: express.Request, res: express.Response) => {
+const handleAlertCheck = async (req: express.Request, res: express.Response) => {
   try {
     const secretFromQuery = req.query.secret;
     const secretFromHeader = req.headers['x-cron-secret'];
@@ -817,8 +864,14 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
     const bodySymbols = req.body?.symbols && Array.isArray(req.body.symbols) ? req.body.symbols : null;
     const symbolsToCheck = bodySymbols || querySymbols || config.symbols;
 
-    const results = await checkAllSymbolsRsi(symbolsToCheck);
-    const triggered = results.filter((r) => r.triggered);
+    const [results, vixResult] = await Promise.all([
+      checkAllSymbolsRsi(symbolsToCheck),
+      checkVixAlert(),
+    ]);
+
+    const triggeredRsi = results.filter((r) => r.triggered);
+    const vixTriggered = Boolean(vixResult && vixResult.thresholdSurpassed);
+    const totalTriggered = triggeredRsi.length + (vixTriggered ? 1 : 0);
 
     const tradingWebhookUrl =
       (req.query.webhookUrl as string) ||
@@ -830,25 +883,26 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
     let discordNotified = false;
     let discordDetails = '';
 
-    if (triggered.length > 0) {
+    if (totalTriggered > 0) {
       if (tradingWebhookUrl) {
-        const discordRes = await sendTradingDiscordAlert(tradingWebhookUrl, triggered);
+        const discordRes = await sendTradingDiscordAlert(tradingWebhookUrl, triggeredRsi, vixResult);
         discordNotified = discordRes.success;
         discordDetails = discordRes.success
-          ? `Notificare trimisă cu succes pe canalul #trading (${triggered.length} alerte).`
+          ? `Notificare trimisă cu succes pe canalul #trading (${totalTriggered} alerte: ${triggeredRsi.length} RSI, ${vixTriggered ? '1 VIX' : '0 VIX'}).`
           : `Eroare trimitere Discord: ${discordRes.error}`;
       } else {
         discordDetails = 'Nicio notificare trimisă: TRADING_WEBHOOK_URL nu este configurat.';
       }
     } else {
-      discordDetails = 'Niciun simbol nu a atins pragul RSI ≤ 40.';
+      discordDetails = 'Niciun simbol RSI nu a atins pragul ≤ 40 și VIX nu a depășit pragurile de alertă (> 35 sau creștere ≥ 20%).';
     }
 
-    const responsePayload: RsiCheckResponse = {
+    const responsePayload: AlertCheckResponse = {
       timestamp: new Date().toISOString(),
-      totalChecked: results.length,
-      totalTriggered: triggered.length,
+      totalChecked: results.length + 1, // RSI symbols + VIX
+      totalTriggered,
       results,
+      vix: vixResult,
       discordNotified,
       discordChannel: '#trading',
       discordDetails,
@@ -856,13 +910,15 @@ const handleRsiCheck = async (req: express.Request, res: express.Response) => {
 
     return res.json(responsePayload);
   } catch (err: any) {
-    console.error('Eroare in /api/rsi/check:', err?.message || err);
-    return res.status(500).json({ error: 'RSI_CHECK_ERROR', details: err?.message || String(err) });
+    console.error('Eroare in /api/alerts/check:', err?.message || err);
+    return res.status(500).json({ error: 'ALERT_CHECK_ERROR', details: err?.message || String(err) });
   }
 };
 
-app.get('/api/rsi/check', handleRsiCheck);
-app.post('/api/rsi/check', handleRsiCheck);
+app.get('/api/alerts/check', handleAlertCheck);
+app.post('/api/alerts/check', handleAlertCheck);
+app.get('/api/rsi/check', handleAlertCheck);
+app.post('/api/rsi/check', handleAlertCheck);
 
 
 /**

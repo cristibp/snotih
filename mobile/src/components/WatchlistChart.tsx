@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
@@ -41,6 +41,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [containerWidth, setContainerWidth] = useState<number>(500);
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
+  const chartWrapperRef = useRef<View>(null);
 
   const activeTfConfig = TIMEFRAMES.find((t) => t.label === selectedTf) || TIMEFRAMES[0];
 
@@ -98,6 +99,19 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
     const months = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Noi', 'Dec'];
     const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${timeStr}`;
+  };
+
+  const formatTooltipTime = (timestamp: number, tf: string): string => {
+    const d = new Date(timestamp);
+    const months = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Noi', 'Dec'];
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (tf === '1D') {
+      return `${timeStr} • ${d.getDate()} ${months[d.getMonth()]}`;
+    }
+    if (tf === '5D') {
+      return `${d.getDate()} ${months[d.getMonth()]}, ${timeStr}`;
+    }
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
   };
 
   // Calcule geometrice pentru SVG
@@ -158,10 +172,43 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
     };
   }, [candles, plotWidth, plotHeight]);
 
-  // Touch handler pentru interactiune / scrubbing
+  // Dimensiuni adaptive pentru punctele de pe grafic
+  const { dotRadius, dotStrokeWidth, activeDotRadius } = useMemo(() => {
+    const len = points.length;
+    if (len <= 30) {
+      return { dotRadius: 4, dotStrokeWidth: 1.8, activeDotRadius: 6.5 };
+    }
+    if (len <= 65) {
+      return { dotRadius: 3, dotStrokeWidth: 1.5, activeDotRadius: 5.5 };
+    }
+    if (len <= 110) {
+      return { dotRadius: 2.2, dotStrokeWidth: 1.2, activeDotRadius: 5 };
+    }
+    return { dotRadius: 1.6, dotStrokeWidth: 0.9, activeDotRadius: 4.5 };
+  }, [points.length]);
+
+  // Touch / mouse handler pentru interactiune si scrubbing
   const handleTouch = (evt: any) => {
-    const locX = evt.nativeEvent.locationX;
     if (!points || points.length === 0) return;
+
+    let locX: number | undefined;
+
+    // Direct browser clientX offset calculation for Web
+    if (evt?.nativeEvent?.clientX !== undefined && chartWrapperRef.current) {
+      // @ts-ignore
+      const node = chartWrapperRef.current as any;
+      const rect = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
+      if (rect) {
+        locX = evt.nativeEvent.clientX - rect.left;
+      }
+    }
+
+    if (locX === undefined) {
+      locX = evt?.nativeEvent?.locationX ?? evt?.nativeEvent?.offsetX;
+    }
+
+    if (locX === undefined || isNaN(locX)) return;
+
     const clampedX = Math.max(paddingLeft, Math.min(paddingLeft + plotWidth, locX));
     const ratio = (clampedX - paddingLeft) / plotWidth;
     const rawIdx = Math.round(ratio * (points.length - 1));
@@ -330,6 +377,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
 
       {/* Chart Canvas Area */}
       <View
+        ref={chartWrapperRef}
         style={styles.chartWrapper}
         onTouchStart={handleTouch}
         onTouchMove={handleTouch}
@@ -337,6 +385,8 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
         onMouseMove={handleTouch}
         // @ts-ignore
         onMouseEnter={handleTouch}
+        // @ts-ignore
+        onMouseLeave={() => setTouchIndex(null)}
       >
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -362,7 +412,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
 
             {/* Gridlines orizontale Y-axis: Preturi */}
             {yTicks.map((tick, i) => (
-              <G key={`ytick-${i}`}>
+              <G key={`ytick-${i}`} pointerEvents="none">
                 <Line
                   x1={paddingLeft}
                   y1={tick.y}
@@ -387,7 +437,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
 
             {/* Linia de referinta inchidere precedenta */}
             {prevCloseY !== null && (
-              <G key="prevCloseLine">
+              <G key="prevCloseLine" pointerEvents="none">
                 <Line
                   x1={paddingLeft}
                   y1={prevCloseY}
@@ -413,7 +463,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
 
             {/* Gridlines verticale X-axis: Timp / Ore */}
             {xTicks.map((tick, i) => (
-              <G key={`xtick-${i}`}>
+              <G key={`xtick-${i}`} pointerEvents="none">
                 <Line
                   x1={tick.x}
                   y1={paddingTop}
@@ -438,7 +488,7 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
             ))}
 
             {/* Area fill sub curba */}
-            <Path d={svgAreaPath} fill="url(#chartGradient)" />
+            <Path d={svgAreaPath} fill="url(#chartGradient)" pointerEvents="none" />
 
             {/* Linia principala de pret */}
             <Path
@@ -446,49 +496,159 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
               fill="none"
               stroke={accentColor}
               strokeWidth={2}
+              pointerEvents="none"
             />
 
-            {/* Punct activ si crosshairs la atingere (Scrubbing) */}
-            {activePoint && (
-              <G key="active-crosshair">
-                <Line
-                  x1={activePoint.x}
-                  y1={paddingTop}
-                  x2={activePoint.x}
-                  y2={paddingTop + plotHeight}
-                  stroke="#3B82F6"
-                  strokeWidth={1.5}
-                  strokeDasharray="3,3"
-                />
-                <Line
-                  x1={paddingLeft}
-                  y1={activePoint.y}
-                  x2={paddingLeft + plotWidth}
-                  y2={activePoint.y}
-                  stroke="#3B82F6"
-                  strokeWidth={1}
-                  strokeDasharray="3,3"
-                  opacity={0.5}
-                />
+            {/* Puncte pe linia graficului pentru fiecare moment/lumanare */}
+            {points.map((pt, i) => {
+              const isHovered = touchIndex === i;
+              return (
                 <Circle
-                  cx={activePoint.x}
-                  cy={activePoint.y}
-                  r={5}
-                  fill="#3B82F6"
-                  stroke="#FFFFFF"
-                  strokeWidth={2}
+                  key={`dot-${i}`}
+                  cx={pt.x}
+                  cy={pt.y}
+                  r={isHovered ? activeDotRadius : dotRadius}
+                  fill={isHovered ? accentColor : (isBlack ? '#0F172A' : '#FFFFFF')}
+                  stroke={accentColor}
+                  strokeWidth={isHovered ? 2.5 : dotStrokeWidth}
+                  pointerEvents="none"
                 />
-              </G>
-            )}
+              );
+            })}
 
-            {/* Suprafata invizibila pentru captura atingerilor */}
-            <Rect
-              x={paddingLeft}
-              y={paddingTop}
-              width={plotWidth}
-              height={plotHeight}
-              fill="transparent"
-            />
+            {/* Zone interactive (hitboxes) la mouse over pe fiecare punct */}
+            {points.map((pt, i) => {
+              const colWidth = points.length > 1 ? Math.max(6, plotWidth / points.length) : plotWidth;
+              return (
+                <Rect
+                  key={`hitbox-${i}`}
+                  x={pt.x - colWidth / 2}
+                  y={paddingTop}
+                  width={colWidth}
+                  height={plotHeight}
+                  fill="transparent"
+                  // @ts-ignore
+                  pointerEvents="all"
+                  // @ts-ignore
+                  onMouseEnter={() => setTouchIndex(i)}
+                  // @ts-ignore
+                  onMouseMove={() => setTouchIndex(i)}
+                  onTouchStart={() => setTouchIndex(i)}
+                />
+              );
+            })}
+
+            {/* Punct activ, crosshairs si tooltip la mouse over / scrubbing */}
+            {activePoint && (() => {
+              const tooltipWidth = 132;
+              const tooltipHeight = 46;
+              let tooltipX = activePoint.x - tooltipWidth / 2;
+              if (tooltipX < paddingLeft + 2) {
+                tooltipX = paddingLeft + 2;
+              } else if (tooltipX + tooltipWidth > paddingLeft + plotWidth - 2) {
+                tooltipX = paddingLeft + plotWidth - tooltipWidth - 2;
+              }
+
+              const isNearTop = activePoint.y - paddingTop < tooltipHeight + 14;
+              const tooltipY = isNearTop
+                ? activePoint.y + 12
+                : activePoint.y - tooltipHeight - 12;
+
+              const caretX = Math.max(tooltipX + 12, Math.min(tooltipX + tooltipWidth - 12, activePoint.x));
+              const caretPath = isNearTop
+                ? `M ${caretX - 6} ${tooltipY} L ${caretX} ${tooltipY - 6} L ${caretX + 6} ${tooltipY} Z`
+                : `M ${caretX - 6} ${tooltipY + tooltipHeight} L ${caretX} ${tooltipY + tooltipHeight + 6} L ${caretX + 6} ${tooltipY + tooltipHeight} Z`;
+
+              return (
+                <G key="active-crosshair-tooltip" pointerEvents="none">
+                  {/* Ghidaj vertical punct activ */}
+                  <Line
+                    x1={activePoint.x}
+                    y1={paddingTop}
+                    x2={activePoint.x}
+                    y2={paddingTop + plotHeight}
+                    stroke="#3B82F6"
+                    strokeWidth={1.5}
+                    strokeDasharray="3,3"
+                  />
+                  {/* Ghidaj orizontal punct activ */}
+                  <Line
+                    x1={paddingLeft}
+                    y1={activePoint.y}
+                    x2={paddingLeft + plotWidth}
+                    y2={activePoint.y}
+                    stroke="#3B82F6"
+                    strokeWidth={1}
+                    strokeDasharray="3,3"
+                    opacity={0.45}
+                  />
+
+                  {/* Halo luminos in spatele punctului */}
+                  <Circle
+                    cx={activePoint.x}
+                    cy={activePoint.y}
+                    r={activeDotRadius + 6}
+                    fill={accentColor}
+                    opacity={0.25}
+                  />
+
+                  {/* Punct activ evidentiat */}
+                  <Circle
+                    cx={activePoint.x}
+                    cy={activePoint.y}
+                    r={activeDotRadius + 1}
+                    fill={accentColor}
+                    stroke="#FFFFFF"
+                    strokeWidth={2}
+                  />
+
+                  {/* Triunghi indicator tooltip (caret) */}
+                  <Path
+                    d={caretPath}
+                    fill={isBlack ? '#0F172A' : '#1E293B'}
+                    stroke={accentColor}
+                    strokeWidth={1}
+                  />
+
+                  {/* Card Tooltip pe grafic */}
+                  <Rect
+                    x={tooltipX}
+                    y={tooltipY}
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx={6}
+                    fill={isBlack ? '#0F172A' : '#1E293B'}
+                    stroke={accentColor}
+                    strokeWidth={1.5}
+                    opacity={0.96}
+                  />
+
+                  {/* Text Pret in Tooltip */}
+                  <SvgText
+                    x={tooltipX + tooltipWidth / 2}
+                    y={tooltipY + 18}
+                    fill="#FFFFFF"
+                    fontSize="12"
+                    fontWeight="800"
+                    textAnchor="middle"
+                  >
+                    Preț: {currencySymbol}{activePoint.candle.close.toFixed(2)}
+                  </SvgText>
+
+                  {/* Text Timp in Tooltip */}
+                  <SvgText
+                    x={tooltipX + tooltipWidth / 2}
+                    y={tooltipY + 34}
+                    fill="#94A3B8"
+                    fontSize="10"
+                    fontWeight="600"
+                    textAnchor="middle"
+                  >
+                    🕒 {formatTooltipTime(activePoint.candle.timestamp, selectedTf)}
+                  </SvgText>
+                </G>
+              );
+            })()}
           </Svg>
         )}
       </View>
