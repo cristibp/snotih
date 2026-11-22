@@ -54,6 +54,23 @@ export interface RsiSymbolResult {
   error?: string;
 }
 
+export interface VixAlertResult {
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  previousClose: number;
+  changePercent: number;
+  prevHourClose?: number;
+  hourlyChangePercent?: number;
+  thresholdSurpassed: boolean;
+  reasons: string[];
+  colorHex: string;
+  colorInt: number;
+  message: string;
+  lastUpdated: string;
+  error?: string;
+}
+
 export interface RsiSymbolsConfig {
   symbols: string[];
   isOverridden: boolean;
@@ -64,17 +81,23 @@ export interface RsiStatusResponse {
   timestamp: string;
   config: RsiSymbolsConfig;
   results: RsiSymbolResult[];
+  vix?: VixAlertResult;
 }
+
+export type AlertsStatusResponse = RsiStatusResponse;
 
 export interface RsiCheckResponse {
   timestamp: string;
   totalChecked: number;
   totalTriggered: number;
   results: RsiSymbolResult[];
+  vix?: VixAlertResult;
   discordNotified: boolean;
   discordChannel: string;
   discordDetails?: string;
 }
+
+export type AlertCheckResponse = RsiCheckResponse;
 
 export interface IntradayAverageResult {
   windowStart: string;

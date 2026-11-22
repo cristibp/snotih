@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { RsiAlertTier, RsiSymbolResult } from '../types';
+import { RsiAlertTier, RsiSymbolResult, VixAlertResult } from '../types';
 
 const HTTP_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -223,6 +223,144 @@ export async function checkAllSymbolsRsi(symbols: string[]): Promise<RsiSymbolRe
   return Promise.all(promises);
 }
 
+/**
+ * Evalueaza daca nivelul sau cresterea VIX declanseaza o alerta:
+ * - Creste cu >= 20% (orara sau zilnica)
+ * - Sau depaseste nivelul de 35
+ */
+export function evaluateVixThreshold(
+  currentPrice: number,
+  changePercent: number,
+  hourlyChangePercent?: number | null
+): {
+  thresholdSurpassed: boolean;
+  reasons: string[];
+  colorHex: string;
+  colorInt: number;
+  message: string;
+} {
+  const reasons: string[] = [];
+
+  const isAbove35 = currentPrice > 35;
+  const isHourly20 = hourlyChangePercent != null && hourlyChangePercent >= 20;
+  const isDaily20 = changePercent >= 20;
+  const isIncrease20 = isHourly20 || isDaily20;
+
+  if (isAbove35) {
+    reasons.push(`Nivel VIX critic: ${currentPrice.toFixed(2)} (prag > 35)`);
+  }
+  if (isHourly20 && hourlyChangePercent != null) {
+    const sign = hourlyChangePercent > 0 ? '+' : '';
+    reasons.push(`Creștere orară VIX: ${sign}${hourlyChangePercent.toFixed(2)}% (prag ≥ +20%)`);
+  }
+  if (isDaily20) {
+    const sign = changePercent > 0 ? '+' : '';
+    reasons.push(`Creștere zilnică VIX: ${sign}${changePercent.toFixed(2)}% (prag ≥ +20%)`);
+  }
+
+  const thresholdSurpassed = isAbove35 || isIncrease20;
+
+  if (thresholdSurpassed) {
+    return {
+      thresholdSurpassed: true,
+      reasons,
+      colorHex: '#EF4444',
+      colorInt: 0xEF4444, // Red
+      message: reasons.join(' • '),
+    };
+  }
+
+  const hInfo = hourlyChangePercent != null ? `, ${hourlyChangePercent >= 0 ? '+' : ''}${hourlyChangePercent.toFixed(2)}% 1h` : '';
+  return {
+    thresholdSurpassed: false,
+    reasons: [],
+    colorHex: '#10B981',
+    colorInt: 0x10B981, // Green
+    message: `VIX în parametri normali: ${currentPrice.toFixed(2)} (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}% zi${hInfo})`,
+  };
+}
+
+/**
+ * Prelucreaza cotatia si istoricul orar pentru VIX (^VIX) din Yahoo Finance
+ * si verifica pragurile de alerta (crestere >= 20% sau nivel > 35).
+ */
+export async function checkVixAlert(): Promise<VixAlertResult> {
+  const symbol = '^VIX';
+  const nowStr = new Date().toISOString();
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1h`;
+    const res = await axios.get(url, {
+      headers: HTTP_HEADERS,
+      timeout: 8000,
+    });
+
+    const result = res.data?.chart?.result?.[0];
+    if (!result) {
+      throw new Error('Nu s-au găsit date pentru ^VIX în răspunsul Yahoo Finance.');
+    }
+
+    const meta = result.meta || {};
+    const quote = result.indicators?.quote?.[0] || {};
+    const rawCloses = (quote.close || []) as (number | null)[];
+    const validCloses = rawCloses.filter((c): c is number => typeof c === 'number' && !isNaN(c) && c > 0);
+
+    const currentPrice = Number(
+      (meta.regularMarketPrice ?? (validCloses.length > 0 ? validCloses[validCloses.length - 1] : 0)).toFixed(2)
+    );
+    const previousClose = Number((meta.previousClose ?? meta.chartPreviousClose ?? currentPrice).toFixed(2));
+
+    const changePercent = typeof meta.regularMarketChangePercent === 'number'
+      ? Number(meta.regularMarketChangePercent.toFixed(2))
+      : previousClose > 0
+        ? Number((((currentPrice - previousClose) / previousClose) * 100).toFixed(2))
+        : 0;
+
+    let prevHourClose: number | undefined = undefined;
+    let hourlyChangePercent: number | undefined = undefined;
+
+    if (validCloses.length >= 2) {
+      prevHourClose = Number(validCloses[validCloses.length - 2].toFixed(2));
+      if (prevHourClose > 0) {
+        hourlyChangePercent = Number((((currentPrice - prevHourClose) / prevHourClose) * 100).toFixed(2));
+      }
+    }
+
+    const evalResult = evaluateVixThreshold(currentPrice, changePercent, hourlyChangePercent);
+
+    return {
+      symbol: '^VIX',
+      name: meta.shortName || meta.longName || 'CBOE Volatility Index',
+      currentPrice,
+      previousClose,
+      changePercent,
+      prevHourClose,
+      hourlyChangePercent,
+      thresholdSurpassed: evalResult.thresholdSurpassed,
+      reasons: evalResult.reasons,
+      colorHex: evalResult.colorHex,
+      colorInt: evalResult.colorInt,
+      message: evalResult.message,
+      lastUpdated: nowStr,
+    };
+  } catch (err: any) {
+    console.error('[AlertService] Eroare la preluarea datelor VIX:', err?.message || err);
+    return {
+      symbol: '^VIX',
+      name: 'CBOE Volatility Index',
+      currentPrice: 0,
+      previousClose: 0,
+      changePercent: 0,
+      thresholdSurpassed: false,
+      reasons: [],
+      colorHex: '#6B7280',
+      colorInt: 0x6B7280,
+      message: 'Date VIX indisponibile temporar.',
+      lastUpdated: nowStr,
+      error: err?.message || 'DATA_UNAVAILABLE',
+    };
+  }
+}
 
 /**
  * Transforma URL-ul webhook-ului Discord pentru a folosi proxy-ul Cloudflare si header-ul secret din mediul de rulare.
@@ -237,68 +375,132 @@ export function formatDiscordWebhookRequest() {
 }
 
 /**
- * Trimite notificarile de alerta pe canalul Discord #trading.
+ * Trimite notificarile de alerta pe canalul Discord #trading (RSI + VIX).
  */
 export async function sendTradingDiscordAlert(
   webhookUrl: string,
-  triggeredResults: RsiSymbolResult[]
+  triggeredResults: RsiSymbolResult[],
+  vixResult?: VixAlertResult
 ): Promise<{ success: boolean; status?: number; error?: string }> {
-  if (!webhookUrl || !triggeredResults || triggeredResults.length === 0) {
-    return { success: false, error: 'No webhook URL or no triggered results.' };
+  const hasRsi = Array.isArray(triggeredResults) && triggeredResults.length > 0;
+  const hasVix = Boolean(vixResult && vixResult.thresholdSurpassed);
+
+  if (!webhookUrl || (!hasRsi && !hasVix)) {
+    return { success: false, error: 'No webhook URL or no triggered alerts.' };
   }
 
   try {
-    const embeds = triggeredResults.map((item) => {
-      const tierBadge =
-        item.tier === 'red'
-          ? '🔴 CRITIC (RSI ≤ 30)'
-          : item.tier === 'orange'
-            ? '🟠 ATENȚIE (RSI ≤ 35)'
-            : '🔵 MONITORIZARE (RSI ≤ 40)';
+    const embeds: any[] = [];
 
-      return {
-        title: `🚨 Alertă Trading RSI — ${item.symbol}`,
-        description: `Simbolul **${item.symbol}** (${item.name || item.resolvedSymbol}) a atins pragul **${tierBadge}**!`,
-        color: item.colorInt,
+    // 1. Embed pentru alerta VIX (daca a depasit pragul)
+    if (hasVix && vixResult) {
+      const hChangeStr =
+        vixResult.hourlyChangePercent !== undefined
+          ? `${vixResult.hourlyChangePercent >= 0 ? '+' : ''}${vixResult.hourlyChangePercent.toFixed(2)}%`
+          : 'N/A';
+
+      embeds.push({
+        title: `🚨 Alertă Volatilitate VIX — ^VIX`,
+        description: `Indicele CBOE Volatility Index (**^VIX**) a depășit pragul de alertă!\n${vixResult.message}`,
+        color: vixResult.colorInt,
         fields: [
           {
-            name: '📈 ETF / Simbol',
-            value: `\`${item.symbol}\` (${item.resolvedSymbol})`,
+            name: '📊 Cotație VIX',
+            value: `**${vixResult.currentPrice.toFixed(2)}**`,
             inline: true,
           },
           {
-            name: '💰 Preț Curent',
-            value: `**${item.currentPrice.toFixed(2)} ${item.currency || 'EUR'}**`,
+            name: '📈 Variație Zilnică',
+            value: `**${vixResult.changePercent >= 0 ? '+' : ''}${vixResult.changePercent.toFixed(2)}%**`,
             inline: true,
           },
           {
-            name: '📉 RSI (14)',
-            value: `**${item.rsi.toFixed(2)}**`,
+            name: '⏱️ Variație Orară (1h)',
+            value: `**${hChangeStr}**`,
             inline: true,
           },
           {
-            name: '🎯 Nivel Declanșat',
-            value: item.message,
+            name: '🎯 Condiții Declanșate',
+            value: vixResult.reasons.length > 0
+              ? vixResult.reasons.map((r) => `• ${r}`).join('\n')
+              : vixResult.message,
             inline: false,
           },
         ],
         footer: {
-          text: 'Snotih Trading • Canal #trading',
+          text: 'Snotih Alerte • Canal #trading',
         },
         timestamp: new Date().toISOString(),
-      };
-    });
+      });
+    }
 
-    const summaryText = `🔔 **[#trading] Alertă Declanșată pentru ${triggeredResults.length} simbol(uri)**:\n` +
-      triggeredResults
-        .map(
-          (t) =>
-            `• **${t.symbol}**: Preț \`${t.currentPrice.toFixed(2)} ${t.currency || 'EUR'}\` | RSI: \`${t.rsi.toFixed(2)}\` (${t.tier.toUpperCase()})`
-        )
-        .join('\n');
+    // 2. Embeds pentru simbolurile RSI declansate
+    if (hasRsi) {
+      triggeredResults.forEach((item) => {
+        const tierBadge =
+          item.tier === 'red'
+            ? '🔴 CRITIC (RSI ≤ 30)'
+            : item.tier === 'orange'
+              ? '🟠 ATENȚIE (RSI ≤ 35)'
+              : '🔵 MONITORIZARE (RSI ≤ 40)';
+
+        embeds.push({
+          title: `🚨 Alertă Trading RSI — ${item.symbol}`,
+          description: `Simbolul **${item.symbol}** (${item.name || item.resolvedSymbol}) a atins pragul **${tierBadge}**!`,
+          color: item.colorInt,
+          fields: [
+            {
+              name: '📈 ETF / Simbol',
+              value: `\`${item.symbol}\` (${item.resolvedSymbol})`,
+              inline: true,
+            },
+            {
+              name: '💰 Preț Curent',
+              value: `**${item.currentPrice.toFixed(2)} ${item.currency || 'EUR'}**`,
+              inline: true,
+            },
+            {
+              name: '📉 RSI (14)',
+              value: `**${item.rsi.toFixed(2)}**`,
+              inline: true,
+            },
+            {
+              name: '🎯 Nivel Declanșat',
+              value: item.message,
+              inline: false,
+            },
+          ],
+          footer: {
+            text: 'Snotih Alerte • Canal #trading',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      });
+    }
+
+    const summaryLines: string[] = [];
+    if (hasVix && vixResult) {
+      const hInfo =
+        vixResult.hourlyChangePercent !== undefined
+          ? ` | 1h: \`${vixResult.hourlyChangePercent >= 0 ? '+' : ''}${vixResult.hourlyChangePercent.toFixed(2)}%\``
+          : '';
+      summaryLines.push(
+        `• **^VIX**: Cotație \`${vixResult.currentPrice.toFixed(2)}\` | Zi: \`${vixResult.changePercent >= 0 ? '+' : ''}${vixResult.changePercent.toFixed(2)}%\`${hInfo} — **VOLATILITATE RIDICATĂ**`
+      );
+    }
+    if (hasRsi) {
+      triggeredResults.forEach((t) => {
+        summaryLines.push(
+          `• **${t.symbol}**: Preț \`${t.currentPrice.toFixed(2)} ${t.currency || 'EUR'}\` | RSI: \`${t.rsi.toFixed(2)}\` (${t.tier.toUpperCase()})`
+        );
+      });
+    }
+
+    const totalCount = (hasVix ? 1 : 0) + (hasRsi ? triggeredResults.length : 0);
+    const summaryText = `🔔 **[#trading] Alerte Declanșate (${totalCount})**:\n` + summaryLines.join('\n');
 
     const payload = {
-      username: 'Snotih Trading Bot',
+      username: 'Snotih Alerts Bot',
       content: summaryText,
       embeds,
     };
@@ -310,7 +512,7 @@ export async function sendTradingDiscordAlert(
     });
     return { success: true, status: res.status };
   } catch (err: any) {
-    console.error('[RsiService] Eroare la trimiterea notificarii pe Discord #trading:', err?.message || err);
+    console.error('[AlertService] Eroare la trimiterea notificarii pe Discord #trading:', err?.message || err);
     return { success: false, error: err?.message || String(err) };
   }
 }
