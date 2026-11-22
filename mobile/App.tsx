@@ -10,6 +10,11 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { useAuth } from './src/hooks/useAuth';
+import {
+  addFullscreenChangeListener,
+  exitWebFullscreen,
+  requestWebFullscreen,
+} from './src/services/fullscreen';
 
 export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession' | 'signals' | 'settings';
 export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
@@ -36,8 +41,46 @@ function getInitialTab(): TabType {
 
 function MainApp() {
   const [activeTab, setActiveTabState] = useState<TabType>(getInitialTab);
+  const [isKioskMode, setIsKioskMode] = useState<boolean>(false);
   const { isBlack, colors, toggleTheme } = useTheme();
   const { user, loading: authLoading, logout } = useAuth();
+
+  // Ascultare evenimente browser fullscreen si tasta Escape pe Web
+  useEffect(() => {
+    const unsubscribeFs = addFullscreenChangeListener((isFullscreen) => {
+      if (!isFullscreen && isKioskMode) {
+        setIsKioskMode(false);
+      }
+    });
+
+    const handleKeyDown = (e: any) => {
+      if (e?.key === 'Escape' && isKioskMode) {
+        setIsKioskMode(false);
+        exitWebFullscreen();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      unsubscribeFs();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+  }, [isKioskMode]);
+
+  const handleToggleKiosk = (enable?: boolean) => {
+    const nextState = enable !== undefined ? enable : !isKioskMode;
+    setIsKioskMode(nextState);
+    if (nextState) {
+      requestWebFullscreen();
+    } else {
+      exitWebFullscreen();
+    }
+  };
 
   // Load persisted tab on mount (for native mobile via AsyncStorage)
   useEffect(() => {
@@ -97,10 +140,12 @@ function MainApp() {
           <StatusBar
             barStyle={colors.statusBar}
             backgroundColor={colors.nav}
+            hidden={isKioskMode}
           />
-          <View style={[styles.navBar, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
-            <View style={styles.navContentRow}>
-              <View style={[styles.segmentedControl, { backgroundColor: colors.segmentBackground }]}>
+          {!isKioskMode && (
+            <View style={[styles.navBar, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
+              <View style={styles.navContentRow}>
+                <View style={[styles.segmentedControl, { backgroundColor: colors.segmentBackground }]}>
                 <TouchableOpacity
                   style={[
                     styles.segmentButton,
@@ -247,13 +292,18 @@ function MainApp() {
               </TouchableOpacity>
             </View>
           </View>
+          )}
 
           <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
             <View style={[styles.tabContentPane, { display: activeTab === 'rates' ? 'flex' : 'none' }]}>
               <HomeScreen />
             </View>
             <View style={[styles.tabContentPane, { display: activeTab === 'watchlist' ? 'flex' : 'none' }]}>
-              <WatchlistScreen isActive={activeTab === 'watchlist'} />
+              <WatchlistScreen
+                isActive={activeTab === 'watchlist'}
+                isKioskMode={isKioskMode}
+                onToggleKiosk={handleToggleKiosk}
+              />
             </View>
             <View style={[styles.tabContentPane, { display: activeTab === 'trading' ? 'flex' : 'none' }]}>
               <TradingScreen isActive={activeTab === 'trading'} />

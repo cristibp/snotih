@@ -23,6 +23,8 @@ interface FavoritesComparisonChartProps {
   favorites: string[];
   quotes: Record<string, MarketQuote>;
   onSelectSymbol?: (symbol: string) => void;
+  isKiosk?: boolean;
+  onToggleKiosk?: (enable?: boolean) => void;
 }
 
 const TIMEFRAMES = [
@@ -46,12 +48,15 @@ export default function FavoritesComparisonChart({
   favorites,
   quotes,
   onSelectSymbol,
+  isKiosk = false,
+  onToggleKiosk,
 }: FavoritesComparisonChartProps) {
   const { colors, isBlack } = useTheme();
   const [selectedTf, setSelectedTf] = useState<string>('1D');
   const [histories, setHistories] = useState<Record<string, CandlePoint[]>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [containerWidth, setContainerWidth] = useState<number>(500);
+  const [containerHeight, setContainerHeight] = useState<number>(isKiosk ? 360 : 310);
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
   const [highlightedSymbol, setHighlightedSymbol] = useState<string | null>(null);
 
@@ -99,9 +104,12 @@ export default function FavoritesComparisonChart({
   }, [favorites, activeTfConfig.range, activeTfConfig.interval]);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
+    const { width: w, height: h } = e.nativeEvent.layout;
     if (w > 0 && Math.abs(w - containerWidth) > 5) {
       setContainerWidth(w);
+    }
+    if (h > 0 && Math.abs(h - containerHeight) > 5) {
+      setContainerHeight(h);
     }
   };
 
@@ -117,7 +125,9 @@ export default function FavoritesComparisonChart({
   }, [histories]);
 
   // Calcule geometrice
-  const chartHeight = 210;
+  const chartHeight = isKiosk
+    ? Math.max(250, Math.min(containerHeight - 120, 520))
+    : 210;
   const paddingLeft = 48;
   const paddingRight = 14;
   const paddingTop = 14;
@@ -289,37 +299,66 @@ export default function FavoritesComparisonChart({
           </Text>
         </View>
 
-        {/* Timeframe Selector */}
-        <View style={[styles.tfSelector, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}>
-          {TIMEFRAMES.map((tf) => {
-            const isSelected = selectedTf === tf.label;
-            return (
-              <TouchableOpacity
-                key={tf.label}
-                style={[
-                  styles.tfButton,
-                  isSelected && [
-                    styles.tfButtonActive,
-                    { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
-                  ],
-                ]}
-                onPress={() => setSelectedTf(tf.label)}
-                activeOpacity={0.8}
-              >
-                <Text
+        {/* Controls: Timeframes + Kiosk Toggle */}
+        <View style={styles.headerRightArea}>
+          <View style={[styles.tfSelector, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}>
+            {TIMEFRAMES.map((tf) => {
+              const isSelected = selectedTf === tf.label;
+              return (
+                <TouchableOpacity
+                  key={tf.label}
                   style={[
-                    styles.tfText,
-                    {
-                      color: isSelected ? '#3B82F6' : colors.textMuted,
-                      fontWeight: isSelected ? '700' : '600',
-                    },
+                    styles.tfButton,
+                    isSelected && [
+                      styles.tfButtonActive,
+                      { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
+                    ],
                   ]}
+                  onPress={() => setSelectedTf(tf.label)}
+                  activeOpacity={0.8}
                 >
-                  {tf.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                  <Text
+                    style={[
+                      styles.tfText,
+                      {
+                        color: isSelected ? '#3B82F6' : colors.textMuted,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {tf.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {onToggleKiosk && (
+            <TouchableOpacity
+              style={[
+                styles.kioskBtn,
+                isKiosk
+                  ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
+                  : {
+                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                      borderColor: colors.cardBorder,
+                    },
+              ]}
+              onPress={() => onToggleKiosk(!isKiosk)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isKiosk ? 'Ieșire din ecran complet' : 'Ecran complet / Kiosk'}
+            >
+              <Text
+                style={[
+                  styles.kioskBtnText,
+                  { color: isKiosk ? '#FFFFFF' : colors.text },
+                ]}
+              >
+                {isKiosk ? '✕ Ieșire Kiosk' : '⛶ Kiosk'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -384,7 +423,7 @@ export default function FavoritesComparisonChart({
 
       {/* Chart Canvas Area */}
       <View
-        style={styles.chartWrapper}
+        style={[styles.chartWrapper, { height: chartHeight }]}
         onTouchStart={handleTouch}
         onTouchMove={handleTouch}
         // @ts-ignore
@@ -393,14 +432,14 @@ export default function FavoritesComparisonChart({
         onMouseEnter={handleTouch}
       >
         {isLoading ? (
-          <View style={styles.centerContainer}>
+          <View style={[styles.centerContainer, { height: chartHeight }]}>
             <ActivityIndicator size="small" color="#3B82F6" />
             <Text style={[styles.loadingText, { color: colors.textMuted }]}>
               Se încarcă datele pentru favorite...
             </Text>
           </View>
         ) : Object.keys(normalizedSeries).length === 0 ? (
-          <View style={styles.centerContainer}>
+          <View style={[styles.centerContainer, { height: chartHeight }]}>
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
               Date insuficiente pentru graficul comparativ.
             </Text>
@@ -594,6 +633,23 @@ const styles = StyleSheet.create({
   subtitleText: {
     fontSize: 11,
     marginTop: 2,
+  },
+  headerRightArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  kioskBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   tfSelector: {
     flexDirection: 'row',

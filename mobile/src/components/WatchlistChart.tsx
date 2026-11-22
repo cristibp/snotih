@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -25,6 +26,13 @@ import { useTheme } from '../theme/ThemeContext';
 interface WatchlistChartProps {
   symbol: string;
   quote?: MarketQuote;
+  isKiosk?: boolean;
+  onToggleKiosk?: (enable?: boolean) => void;
+  favorites?: string[];
+  onSelectSymbol?: (symbol: string) => void;
+  countdown?: number;
+  isRefreshing?: boolean;
+  onManualRefresh?: () => void;
 }
 
 const TIMEFRAMES = [
@@ -34,12 +42,23 @@ const TIMEFRAMES = [
   { label: '1Y', range: '1y', interval: '1d' },
 ];
 
-export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
+export default function WatchlistChart({
+  symbol,
+  quote,
+  isKiosk = false,
+  onToggleKiosk,
+  favorites,
+  onSelectSymbol,
+  countdown,
+  isRefreshing,
+  onManualRefresh,
+}: WatchlistChartProps) {
   const { colors, isBlack } = useTheme();
   const [selectedTf, setSelectedTf] = useState<string>('1D');
   const [candles, setCandles] = useState<CandlePoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [containerWidth, setContainerWidth] = useState<number>(500);
+  const [containerHeight, setContainerHeight] = useState<number>(isKiosk ? 360 : 310);
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
   const chartWrapperRef = useRef<View>(null);
 
@@ -71,10 +90,32 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
   }, [symbol, activeTfConfig.range, activeTfConfig.interval]);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
+    const { width: w, height: h } = e.nativeEvent.layout;
     if (w > 0 && Math.abs(w - containerWidth) > 5) {
       setContainerWidth(w);
     }
+    if (h > 0 && Math.abs(h - containerHeight) > 5) {
+      setContainerHeight(h);
+    }
+  };
+
+  const chartHeight = isKiosk
+    ? Math.max(250, Math.min(containerHeight - (favorites && favorites.length > 1 ? 140 : 110), 520))
+    : 210;
+
+  const currentFavIndex = favorites ? favorites.indexOf(symbol) : -1;
+  const hasFavNavigation = Boolean(favorites && favorites.length > 1 && onSelectSymbol);
+
+  const handlePrevSymbol = () => {
+    if (!favorites || favorites.length <= 1 || !onSelectSymbol) return;
+    const prevIdx = (currentFavIndex - 1 + favorites.length) % favorites.length;
+    onSelectSymbol(favorites[prevIdx]);
+  };
+
+  const handleNextSymbol = () => {
+    if (!favorites || favorites.length <= 1 || !onSelectSymbol) return;
+    const nextIdx = (currentFavIndex + 1) % favorites.length;
+    onSelectSymbol(favorites[nextIdx]);
   };
 
   // Formatare etichete de timp pentru axa X
@@ -115,7 +156,6 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
   };
 
   // Calcule geometrice pentru SVG
-  const chartHeight = 210;
   const paddingLeft = 48;
   const paddingRight = 14;
   const paddingTop = 14;
@@ -341,44 +381,142 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
           </View>
         </View>
 
-        {/* Timeframe selector tabs */}
-        <View style={[styles.tfSelector, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}>
-          {TIMEFRAMES.map((tf) => {
-            const isSelected = selectedTf === tf.label;
-            return (
-              <TouchableOpacity
-                key={tf.label}
-                style={[
-                  styles.tfButton,
-                  isSelected && [
-                    styles.tfButtonActive,
-                    { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
-                  ],
-                ]}
-                onPress={() => setSelectedTf(tf.label)}
-                activeOpacity={0.8}
-              >
-                <Text
+        {/* Timeframe selector tabs & Kiosk Button */}
+        <View style={styles.headerRightArea}>
+          <View style={[styles.tfSelector, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}>
+            {TIMEFRAMES.map((tf) => {
+              const isSelected = selectedTf === tf.label;
+              return (
+                <TouchableOpacity
+                  key={tf.label}
                   style={[
-                    styles.tfText,
-                    {
-                      color: isSelected ? '#3B82F6' : colors.textMuted,
-                      fontWeight: isSelected ? '700' : '600',
-                    },
+                    styles.tfButton,
+                    isSelected && [
+                      styles.tfButtonActive,
+                      { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
+                    ],
                   ]}
+                  onPress={() => setSelectedTf(tf.label)}
+                  activeOpacity={0.8}
                 >
-                  {tf.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+                  <Text
+                    style={[
+                      styles.tfText,
+                      {
+                        color: isSelected ? '#3B82F6' : colors.textMuted,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {tf.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {onToggleKiosk && (
+            <TouchableOpacity
+              style={[
+                styles.kioskBtn,
+                isKiosk
+                  ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
+                  : { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0', borderColor: colors.cardBorder },
+              ]}
+              onPress={() => onToggleKiosk(!isKiosk)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isKiosk ? 'Ieșire din ecran complet' : 'Ecran complet / Kiosk'}
+            >
+              <Text style={[styles.kioskBtnText, { color: isKiosk ? '#FFFFFF' : colors.text }]}>
+                {isKiosk ? '✕ Ieșire Kiosk' : '⛶ Kiosk'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
+
+      {/* Kiosk Mode Bar with Favorite Quick Chips & Countdown */}
+      {isKiosk && (
+        <View style={[styles.kioskBar, { borderBottomColor: colors.cardBorder }]}>
+          <View style={styles.kioskStatusRow}>
+            <View style={styles.livePulseDot} />
+            <Text style={styles.kioskLiveText}>KIOSK LIVE</Text>
+            {countdown !== undefined && (
+              <TouchableOpacity
+                style={[styles.kioskCountdownPill, { backgroundColor: isBlack ? '#1E293B' : '#F1F5F9' }]}
+                onPress={onManualRefresh}
+                activeOpacity={0.7}
+                accessibilityLabel="Actualizare manuală"
+              >
+                <Text style={[styles.kioskCountdownText, { color: isRefreshing ? '#3B82F6' : colors.textMuted }]}>
+                  {isRefreshing ? '🔄 Se actualizează...' : `🔄 ${countdown}s`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {hasFavNavigation && favorites && (
+            <View style={styles.kioskNavRow}>
+              <TouchableOpacity
+                style={[styles.kioskArrowBtn, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}
+                onPress={handlePrevSymbol}
+                activeOpacity={0.7}
+                accessibilityLabel="Simbolul anterior"
+              >
+                <Text style={[styles.kioskArrowText, { color: colors.text }]}>‹</Text>
+              </TouchableOpacity>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.kioskChipsContainer}
+              >
+                {favorites.map((sym) => {
+                  const isCurrent = sym === symbol;
+                  return (
+                    <TouchableOpacity
+                      key={sym}
+                      style={[
+                        styles.kioskSymbolChip,
+                        isCurrent
+                          ? { backgroundColor: '#3B82F6', borderColor: '#3B82F6' }
+                          : { backgroundColor: isBlack ? '#1E293B' : '#F1F5F9', borderColor: colors.cardBorder },
+                      ]}
+                      onPress={() => onSelectSymbol!(sym)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.kioskSymbolChipText,
+                          { color: isCurrent ? '#FFFFFF' : colors.textMuted },
+                          isCurrent && { fontWeight: '800' },
+                        ]}
+                      >
+                        {sym}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={[styles.kioskArrowBtn, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}
+                onPress={handleNextSymbol}
+                activeOpacity={0.7}
+                accessibilityLabel="Simbolul următor"
+              >
+                <Text style={[styles.kioskArrowText, { color: colors.text }]}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Chart Canvas Area */}
       <View
         ref={chartWrapperRef}
-        style={styles.chartWrapper}
+        style={[styles.chartWrapper, { height: chartHeight }]}
         onTouchStart={handleTouch}
         onTouchMove={handleTouch}
         // @ts-ignore
@@ -389,14 +527,14 @@ export default function WatchlistChart({ symbol, quote }: WatchlistChartProps) {
         onMouseLeave={() => setTouchIndex(null)}
       >
         {isLoading ? (
-          <View style={styles.loadingContainer}>
+          <View style={[styles.loadingContainer, { height: chartHeight }]}>
             <ActivityIndicator size="small" color="#3B82F6" />
             <Text style={[styles.loadingText, { color: colors.textMuted }]}>
               Se încarcă datele graficului...
             </Text>
           </View>
         ) : candles.length < 2 ? (
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { height: chartHeight }]}>
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>
               Nu sunt suficiente date istorice pentru {symbol}
             </Text>
@@ -764,6 +902,91 @@ const styles = StyleSheet.create({
   activeDetailsText: {
     fontSize: 10,
     marginLeft: 4,
+  },
+  headerRightArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  kioskBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  kioskBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    marginBottom: 4,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  kioskStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  livePulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  kioskLiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 0.5,
+  },
+  kioskCountdownPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  kioskCountdownText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  kioskNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  kioskArrowBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskArrowText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  kioskChipsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  kioskSymbolChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  kioskSymbolChipText: {
+    fontSize: 10,
   },
   tfSelector: {
     flexDirection: 'row',

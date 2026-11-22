@@ -29,6 +29,11 @@ interface FavoritesBloombergGridProps {
   onSelectSymbol: (symbol: string) => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  isKiosk?: boolean;
+  onToggleKiosk?: (enable?: boolean) => void;
+  countdown?: number;
+  isRefreshing?: boolean;
+  onManualRefresh?: () => void;
 }
 
 const TIMEFRAMES = [
@@ -52,6 +57,11 @@ export default function FavoritesBloombergGrid({
   onSelectSymbol,
   isSidebarCollapsed = false,
   onToggleSidebar,
+  isKiosk = false,
+  onToggleKiosk,
+  countdown,
+  isRefreshing,
+  onManualRefresh,
 }: FavoritesBloombergGridProps) {
   const { colors, isBlack } = useTheme();
   const [selectedTf, setSelectedTf] = useState<string>('1D');
@@ -131,10 +141,15 @@ export default function FavoritesBloombergGrid({
   };
 
   // Calcul numar coloane si latime card
-  // Daca latimea este peste 700px (sidebar collapsed pe 800x420) -> 3 coloane sau 2 mai late
-  const numColumns = gridWidth > 720 && favorites.length >= 3 ? 3 : 2;
-  const cardGap = 8;
-  const paddingHoriz = 8;
+  // In Kiosk / Full Screen utilizam eficient intreaga latime a ecranului
+  const numColumns =
+    gridWidth > 1050 && favorites.length >= 4
+      ? 4
+      : gridWidth > 680 && favorites.length >= 3
+      ? 3
+      : 2;
+  const cardGap = isKiosk ? 10 : 8;
+  const paddingHoriz = isKiosk ? 6 : 8;
   const cardWidth = Math.max(
     140,
     Math.floor((gridWidth - paddingHoriz * 2 - (numColumns - 1) * cardGap) / numColumns)
@@ -169,9 +184,9 @@ export default function FavoritesBloombergGrid({
     const dayLow = quote?.low ?? 0;
     const dayHigh = quote?.high ?? 0;
 
-    // Dimensiuni grafic SVG
+    // Dimensiuni grafic SVG (mai inalt in modul Kiosk pentru vizibilitate sporita)
     const svgWidth = Math.max(cardWidth - 16, 120);
-    const svgHeight = 68;
+    const svgHeight = isKiosk ? 84 : 68;
     const padL = 4;
     const padR = 4;
     const padT = 6;
@@ -456,22 +471,45 @@ export default function FavoritesBloombergGrid({
       ]}
       onLayout={onLayout}
     >
-      {/* Bloomberg Bar Header: Title, Controls, Timeframes */}
+      {/* Bloomberg Bar Header: Title, Controls, Timeframes, Kiosk Toggle */}
       <View style={styles.topHeader}>
         <View style={styles.titleArea}>
           <View style={styles.badgeTitleRow}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>
-              ▦ Monitor Favorite ({favorites.length})
+              {isKiosk ? '▦ KIOSK MULTI-GRAFIC' : '▦ Monitor Favorite'} ({favorites.length})
             </Text>
             <View style={[styles.liveIndicator, { backgroundColor: '#10B981' }]} />
             <Text style={[styles.liveText, { color: '#10B981' }]}>LIVE</Text>
+
+            {countdown !== undefined && (
+              <TouchableOpacity
+                style={[
+                  styles.kioskCountdownBadge,
+                  { backgroundColor: isBlack ? '#1E293B' : '#F1F5F9' },
+                ]}
+                onPress={onManualRefresh}
+                activeOpacity={0.7}
+                accessibilityLabel="Actualizare manuală"
+              >
+                <Text
+                  style={[
+                    styles.kioskCountdownText,
+                    { color: isRefreshing ? '#3B82F6' : colors.textMuted },
+                  ]}
+                >
+                  {isRefreshing ? '🔄 Actualizare...' : `🔄 ${countdown}s`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-            Evoluție comparativă compactă & cotații stil Bloomberg Terminal
+            {isKiosk
+              ? 'Panou de monitorizare a cotațiilor în timp real • Mod Kiosk Terminal'
+              : 'Evoluție comparativă compactă & cotații stil Bloomberg Terminal'}
           </Text>
         </View>
 
-        {/* Controls: Timeframes + Sidebar Toggle */}
+        {/* Controls: Timeframes + Kiosk Toggle + Sidebar Toggle */}
         <View style={styles.headerRightControls}>
           {/* Timeframe Selector */}
           <View style={[styles.tfSelector, { backgroundColor: isBlack ? '#1E293B' : '#E2E8F0' }]}>
@@ -506,8 +544,36 @@ export default function FavoritesBloombergGrid({
             })}
           </View>
 
-          {/* Optional Sidebar Expand/Collapse Toggle */}
-          {onToggleSidebar && (
+          {/* Kiosk Mode Toggle */}
+          {onToggleKiosk && (
+            <TouchableOpacity
+              style={[
+                styles.kioskToggleBtn,
+                isKiosk
+                  ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
+                  : {
+                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                      borderColor: colors.cardBorder,
+                    },
+              ]}
+              onPress={() => onToggleKiosk(!isKiosk)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isKiosk ? 'Ieșire din ecran complet' : 'Ecran complet / Kiosk'}
+            >
+              <Text
+                style={[
+                  styles.kioskToggleText,
+                  { color: isKiosk ? '#FFFFFF' : colors.text },
+                ]}
+              >
+                {isKiosk ? '✕ Ieșire Kiosk' : '⛶ Kiosk'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Optional Sidebar Expand/Collapse Toggle (only in normal mode) */}
+          {!isKiosk && onToggleSidebar && (
             <TouchableOpacity
               style={[
                 styles.sidebarToggleBtn,
@@ -522,7 +588,7 @@ export default function FavoritesBloombergGrid({
               accessibilityLabel={isSidebarCollapsed ? 'Afișează bara laterală' : 'Maximizare ecran'}
             >
               <Text style={[styles.sidebarToggleText, { color: colors.text }]}>
-                {isSidebarCollapsed ? '⇤ Meniu' : '⛶ Full'}
+                {isSidebarCollapsed ? '⇤ Meniu' : '⇥'}
               </Text>
             </TouchableOpacity>
           )}
@@ -623,6 +689,28 @@ const styles = StyleSheet.create({
   },
   tfText: {
     fontSize: 11,
+  },
+  kioskCountdownBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  kioskCountdownText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  kioskToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   sidebarToggleBtn: {
     paddingHorizontal: 7,

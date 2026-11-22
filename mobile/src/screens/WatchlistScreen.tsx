@@ -14,18 +14,42 @@ import PollingDropdown from '../components/PollingDropdown';
 import WatchlistChart from '../components/WatchlistChart';
 import { useWatchlistPolling } from '../hooks/useWatchlistPolling';
 import { useTheme } from '../theme/ThemeContext';
+import { exitWebFullscreen, requestWebFullscreen } from '../services/fullscreen';
 
 interface WatchlistScreenProps {
   isActive?: boolean;
+  isKioskMode?: boolean;
+  onToggleKiosk?: (enabled?: boolean) => void;
 }
 
 type ViewMode = 'detail' | 'grid' | 'compare';
 
-export default function WatchlistScreen({ isActive = true }: WatchlistScreenProps) {
+export default function WatchlistScreen({
+  isActive = true,
+  isKioskMode: externalKioskMode,
+  onToggleKiosk: externalToggleKiosk,
+}: WatchlistScreenProps) {
   const { colors, isBlack } = useTheme();
   const [setupModalVisible, setSetupModalVisible] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>('detail');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [internalKioskMode, setInternalKioskMode] = useState<boolean>(false);
+
+  const isKiosk = externalKioskMode !== undefined ? externalKioskMode : internalKioskMode;
+
+  const handleToggleKiosk = (enable?: boolean) => {
+    const next = enable !== undefined ? enable : !isKiosk;
+    if (externalToggleKiosk) {
+      externalToggleKiosk(next);
+    } else {
+      setInternalKioskMode(next);
+      if (next) {
+        requestWebFullscreen();
+      } else {
+        exitWebFullscreen();
+      }
+    }
+  };
 
   const {
     pollingInterval,
@@ -44,11 +68,11 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
   } = useWatchlistPolling(isActive);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, isKiosk && styles.containerKiosk, { backgroundColor: colors.background }]}>
       {/* 2-Column Split Landscape Layout (800x420) */}
       <View style={styles.contentRow}>
         {/* Left Column: Favorites Sidebar (240px) */}
-        {!isSidebarCollapsed && (
+        {!isKiosk && !isSidebarCollapsed && (
           <View style={styles.leftColumn}>
             <View style={styles.sidebarHeader}>
               <View style={styles.sidebarTitleRow}>
@@ -90,6 +114,22 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
                   accessibilityLabel="Comuta grafic comparativ favorite"
                 >
                   <Text style={styles.setupIconText}>📊</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.setupIconBtn,
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : colors.card,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => handleToggleKiosk(true)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mod Kiosk ecran complet"
+                >
+                  <Text style={styles.setupIconText}>⛶</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -250,6 +290,31 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
                 onSelectInterval={setPollingInterval}
                 onManualRefresh={manualRefresh}
               />
+
+              <TouchableOpacity
+                style={[
+                  styles.kioskScreenBtn,
+                  isKiosk
+                    ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
+                    : {
+                        backgroundColor: isBlack ? '#1E293B' : colors.card,
+                        borderColor: colors.cardBorder,
+                      },
+                ]}
+                onPress={() => handleToggleKiosk(!isKiosk)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={isKiosk ? 'Ieșire din modul Kiosk' : 'Comută mod Kiosk'}
+              >
+                <Text
+                  style={[
+                    styles.kioskScreenBtnText,
+                    { color: isKiosk ? '#FFFFFF' : colors.text },
+                  ]}
+                >
+                  {isKiosk ? '✕ Ieșire Kiosk' : '⛶ Kiosk'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -262,6 +327,8 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
                 setSelectedSymbol(sym);
                 setViewMode('detail');
               }}
+              isKiosk={isKiosk}
+              onToggleKiosk={handleToggleKiosk}
             />
           ) : viewMode === 'grid' ? (
             <FavoritesBloombergGrid
@@ -273,11 +340,23 @@ export default function WatchlistScreen({ isActive = true }: WatchlistScreenProp
               }}
               isSidebarCollapsed={isSidebarCollapsed}
               onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              isKiosk={isKiosk}
+              onToggleKiosk={handleToggleKiosk}
+              countdown={countdown}
+              isRefreshing={isRefreshing}
+              onManualRefresh={manualRefresh}
             />
           ) : selectedSymbol ? (
             <WatchlistChart
               symbol={selectedSymbol}
               quote={quotes[selectedSymbol]}
+              isKiosk={isKiosk}
+              onToggleKiosk={handleToggleKiosk}
+              favorites={favorites}
+              onSelectSymbol={setSelectedSymbol}
+              countdown={countdown}
+              isRefreshing={isRefreshing}
+              onManualRefresh={manualRefresh}
             />
           ) : (
             <View style={styles.emptyChartState}>
@@ -305,6 +384,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 8,
+  },
+  containerKiosk: {
+    padding: 4,
   },
   contentRow: {
     flex: 1,
@@ -415,6 +497,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  kioskScreenBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kioskScreenBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   statusHint: {
     fontSize: 10,
