@@ -57,9 +57,33 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
+// Trust reverse proxy (Render, Heroku, etc.) so secure cookies & client IP work correctly
+app.set('trust proxy', 1);
+
+const isProd = process.env.NODE_ENV === 'production';
+const rawFrontendUrl = process.env.FRONTEND_URL || (isProd ? 'https://snotih.netlify.app' : 'http://localhost:3000');
+const cleanFrontendUrl = rawFrontendUrl.trim().replace(/\/+$/, '');
+
+const isOriginAllowed = (origin?: string): boolean => {
+  if (!origin) return true; // non-browser requests (curl, mobile native)
+  if (!isProd) return true;
+  const normalized = origin.trim().replace(/\/+$/, '');
+  if (normalized === cleanFrontendUrl || normalized === 'https://snotih.netlify.app') return true;
+  if (normalized.endsWith('.netlify.app')) return true;
+  return false;
+};
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://snotih.netlify.app' : true),
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    }
+  },
   credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 app.use(express.json());
 app.use(cookieParser());

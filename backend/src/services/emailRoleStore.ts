@@ -97,6 +97,9 @@ export class EmailRoleStore {
           this.reload();
         }
       });
+      if (this.watcher && typeof (this.watcher as any).unref === 'function') {
+        (this.watcher as any).unref();
+      }
     } catch {
       console.warn('[EmailRoleStore] fs.watch unavailable – relying on poll.');
     }

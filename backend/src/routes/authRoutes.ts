@@ -34,7 +34,8 @@ const GOOGLE_REDIRECT_URI = (
     : 'http://localhost:3000/api/auth/google/callback')
 ).trim();
 
-const FRONTEND_URL = process.env.FRONTEND_URL || (isProd ? 'https://snotih.netlify.app' : 'http://localhost:3000');
+const rawFrontendUrl = process.env.FRONTEND_URL || (isProd ? 'https://snotih.netlify.app' : 'http://localhost:3000');
+const FRONTEND_URL = rawFrontendUrl.trim().replace(/\/+$/, '');
 
 // ── Startup diagnostics ──
 console.log('[Auth Config]', {
@@ -66,9 +67,19 @@ function deviceLabel(ua?: string): string {
 /* ------------------------------------------------------------------ */
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const rawToken = req.cookies?.[COOKIE_NAME];
+  let rawToken: string | undefined;
+
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    rawToken = authHeader.slice(7).trim();
+  }
+
   if (!rawToken) {
-    return res.status(401).json({ error: 'Unauthorized: no session cookie' });
+    rawToken = req.cookies?.[COOKIE_NAME];
+  }
+
+  if (!rawToken) {
+    return res.status(401).json({ error: 'Unauthorized: no session token or cookie' });
   }
 
   const session = sessionStore.validateSession(rawToken);
@@ -192,7 +203,11 @@ authRouter.get('/api/auth/google/callback', async (req: Request, res: Response) 
       maxAge: 90 * 24 * 60 * 60 * 1000,
     });
 
-    return res.redirect(FRONTEND_URL + '/');
+    // Also redirect with session token in URL fragment (#session_token=...)
+    // This allows browsers that block third-party cookies (e.g. Brave on iOS, Safari ITP)
+    // and mobile apps to persist the session in localStorage / AsyncStorage.
+    // Fragments are not sent to servers in HTTP Referer headers.
+    return res.redirect(`${FRONTEND_URL}/#session_token=${encodeURIComponent(rawToken)}`);
   } catch (err: any) {
     console.error('[Google OAuth error]', err?.response?.data ?? err.message);
     return res.status(500).send('Authentication failed during Google token exchange.');

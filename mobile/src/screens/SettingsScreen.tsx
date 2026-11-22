@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { getAuthHeaders } from '../services/authStorage';
 
 export interface DeviceSessionItem {
   id: string;
@@ -42,7 +43,9 @@ export default function SettingsScreen({ currentUserEmail }: Props) {
     try {
       setLoading(true);
       setError(null);
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${API_BASE_URL}/api/admin/sessions`, {
+        headers: authHeaders,
         credentials: 'include',
       });
       if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -74,8 +77,10 @@ export default function SettingsScreen({ currentUserEmail }: Props) {
             style: 'destructive',
             onPress: async () => {
               try {
+                const authHeaders = await getAuthHeaders();
                 const res = await fetch(`${API_BASE_URL}/api/admin/sessions/${encodeURIComponent(id)}`, {
                   method: 'DELETE',
+                  headers: authHeaders,
                   credentials: 'include',
                 });
                 if (!res.ok) throw new Error(`Error ${res.status}`);
