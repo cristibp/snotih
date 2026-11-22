@@ -34,7 +34,7 @@ const GOOGLE_REDIRECT_URI = (
     : 'http://localhost:3000/api/auth/google/callback')
 ).trim();
 
-const FRONTEND_URL = process.env.FRONTEND_URL || (isProd ? 'https://snoti.onrender.com' : 'http://localhost:3000');
+const FRONTEND_URL = process.env.FRONTEND_URL || (isProd ? 'https://snotih.netlify.app' : 'http://localhost:3000');
 
 // ── Startup diagnostics ──
 console.log('[Auth Config]', {
@@ -182,10 +182,12 @@ authRouter.get('/api/auth/google/callback', async (req: Request, res: Response) 
     });
 
     // Issue long-lived HttpOnly cookie (90 days)
+    // sameSite must be 'none' in production because the frontend (Netlify)
+    // and backend (Render) live on different origins.
     res.cookie(COOKIE_NAME, rawToken, {
       httpOnly: true,
       secure: isProd,
-      sameSite: 'lax',
+      sameSite: isProd ? 'none' : 'lax',
       path: '/',
       maxAge: 90 * 24 * 60 * 60 * 1000,
     });

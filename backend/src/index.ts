@@ -58,7 +58,7 @@ const PORT = process.env.PORT || 3000;
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || true,
+  origin: process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://snotih.netlify.app' : true),
   credentials: true,
 }));
 app.use(express.json());
