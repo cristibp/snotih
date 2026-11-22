@@ -258,4 +258,32 @@ export async function fetchWatchlistHistory(
   return (await response.json()) as WatchlistHistoryResponse;
 }
 
+/**
+ * Preia analiza si evaluarea semnalelor pietelor globale (Futures US & JP, TOPIX, USD/JPY).
+ */
+export async function fetchGlobalSignals(): Promise<import('./types').GlobalSignalsResult> {
+  const response = await fetch(`${API_BASE_URL}/api/global-signals`);
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea semnalelor globale (status ${response.status})`);
+  }
+  return (await response.json()) as import('./types').GlobalSignalsResult;
+}
+
+/**
+ * Declanșează trimiterea raportului semnalelor globale către canalul Discord #trading.
+ */
+export async function triggerGlobalSignalsDiscordAlert(webhookUrl?: string): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/trigger-global-signals-webhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(webhookUrl ? { webhookUrl } : {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Trimiterea pe Discord a eșuat (status ${response.status})`);
+  }
+  return await response.json();
+}
+
+
 

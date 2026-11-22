@@ -7,6 +7,7 @@ export interface ThemeColors {
   text: string;
   textMuted: string;
   textSubtle: string;
+  subText?: string;
   border: string;
   divider: string;
   segmentBackground: string;
@@ -72,6 +73,7 @@ export const lightColors: ThemeColors = {
   text: '#111827',
   textMuted: '#6B7280',
   textSubtle: '#9CA3AF',
+  subText: '#6B7280',
   border: '#E5E7EB',
   divider: '#F0F0F0',
   segmentBackground: '#F3F4F6',
@@ -137,6 +139,7 @@ export const blackColors: ThemeColors = {
   text: '#F3F4F6',
   textMuted: '#9CA3AF',
   textSubtle: '#6B7280',
+  subText: '#9CA3AF',
   border: '#262626',
   divider: '#1F1F1F',
   segmentBackground: '#161618',

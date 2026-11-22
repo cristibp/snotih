@@ -41,6 +41,11 @@ import { getYieldCurveStatus } from './services/macroService';
 import { loadWatchlistSymbols } from './services/watchlistCsvLoader';
 import { getQuotesForSymbols } from './services/marketQuoteService';
 import { fetchWatchlistCandles } from './services/marketHistoryService';
+import {
+  evaluateGlobalSignals,
+  sendGlobalSignalsDiscordAlert,
+  startGlobalSignalsScheduler,
+} from './services/globalSignalsService';
 import { ExchangeRates, RsiCheckResponse } from './types';
 import { authRouter, requireAuth } from './routes/authRoutes';
 import { emailRoleStore } from './services/emailRoleStore';
@@ -1103,9 +1108,99 @@ app.get('/api/watchlist/history/:symbol', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/global-signals
+ * Returneaza evaluarea curenta a indicatorilor pietelor globale:
+ * S&P 500, Nasdaq 100, Dow Jones, Nikkei 225 (CME & Osaka), TOPIX, Bursa Tokyo, USD/JPY,
+ * impreuna cu impactul (POZITIV / NEUTRU / NEGATIV) si scorul agregat de sentiment.
+ */
+app.get('/api/global-signals', async (_req, res) => {
+  try {
+    const result = await evaluateGlobalSignals();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('Eroare la /api/global-signals:', err);
+    return res.status(500).json({
+      error: 'Eroare la evaluarea semnalelor pietelor globale.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * POST /api/trigger-global-signals-webhook & POST /api/global-signals/discord
+ * Trimite sumarul si analiza pietelor globale pe canalul Discord #trading.
+ * Poate primi optional { webhookUrl: string } in body sau query.
+ */
+const handleGlobalSignalsDiscord = async (req: express.Request, res: express.Response) => {
+  try {
+    const webhookUrl =
+      req.body?.webhookUrl ||
+      (req.query?.webhookUrl as string) ||
+      process.env.DISCORD_TRADING_WEBHOOK_URL ||
+      process.env.TRADING_WEBHOOK_URL ||
+      process.env.DISCORD_WEBHOOK_URL;
+
+    const alertRes = await sendGlobalSignalsDiscordAlert(webhookUrl);
+    if (!alertRes.success) {
+      return res.status(500).json({
+        success: false,
+        error: alertRes.error || 'Eroare la trimiterea notificarii pe Discord.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Raportul semnalelor globale a fost trimis pe canalul #trading.',
+      status: alertRes.status,
+      result: alertRes.result,
+    });
+  } catch (err: any) {
+    console.error('Eroare la trimiterea webhook-ului de semnale globale:', err);
+    return res.status(500).json({
+      error: 'Eroare la trimiterea alertei Discord.',
+      message: err?.message || String(err),
+    });
+  }
+};
+
+app.post('/api/trigger-global-signals-webhook', handleGlobalSignalsDiscord);
+app.post('/api/global-signals/discord', handleGlobalSignalsDiscord);
+
+/**
+ * GET /api/cron/global-signals
+ * Endpoint dedicat pentru apeluri automate cron (ex: cron-job.org la ora 08:00).
+ * Protejat prin CRON_SECRET.
+ */
+app.get('/api/cron/global-signals', async (req, res) => {
+  try {
+    const secretFromQuery = req.query.secret;
+    const secretFromHeader = req.headers['x-cron-secret'];
+    const providedSecret = secretFromQuery ?? secretFromHeader;
+
+    if (CRON_SECRET && providedSecret !== CRON_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized: secret invalid sau lipsa.' });
+    }
+
+    const alertRes = await sendGlobalSignalsDiscordAlert();
+    return res.json({
+      success: alertRes.success,
+      status: alertRes.status,
+      error: alertRes.error,
+      result: alertRes.result,
+    });
+  } catch (err: any) {
+    console.error('Eroare in /api/cron/global-signals:', err);
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Serverul ruleaza pe portul ${PORT}`);
   console.log(`[Auth] emailRoleStore loaded. Google OAuth PKCE: ON`);
+
+  // Pornim scheduler-ul automat pentru raportul matinal de la 08:00
+  startGlobalSignalsScheduler();
 
   backfill10YearsIfNeeded()
     .then(() => backfillCurrentMonthIfNeeded())

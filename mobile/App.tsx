@@ -5,12 +5,13 @@ import HomeScreen from './src/screens/HomeScreen';
 import WatchlistScreen from './src/screens/WatchlistScreen';
 import TradingScreen from './src/screens/TradingScreen';
 import RecessionScreen from './src/screens/RecessionScreen';
+import GlobalSignalsScreen from './src/screens/GlobalSignalsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { useAuth } from './src/hooks/useAuth';
 
-export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession' | 'settings';
+export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession' | 'signals' | 'settings';
 export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
 
 function getInitialTab(): TabType {
@@ -21,7 +22,8 @@ function getInitialTab(): TabType {
         stored === 'rates' ||
         stored === 'watchlist' ||
         stored === 'trading' ||
-        stored === 'recession'
+        stored === 'recession' ||
+        stored === 'signals'
       ) {
         return stored;
       }
@@ -49,6 +51,7 @@ function MainApp() {
             storedTab === 'watchlist' ||
             storedTab === 'trading' ||
             storedTab === 'recession' ||
+            storedTab === 'signals' ||
             storedTab === 'settings')
         ) {
           setActiveTabState(storedTab);
@@ -161,6 +164,26 @@ function MainApp() {
                 <TouchableOpacity
                   style={[
                     styles.segmentButton,
+                    activeTab === 'signals' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+                  ]}
+                  onPress={() => handleTabPress('signals')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: colors.segmentText },
+                      activeTab === 'signals' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    🌐 Piețe
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.segmentButton,
                     activeTab === 'recession' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
                   ]}
                   onPress={() => handleTabPress('recession')}
@@ -234,6 +257,9 @@ function MainApp() {
             </View>
             <View style={[styles.tabContentPane, { display: activeTab === 'trading' ? 'flex' : 'none' }]}>
               <TradingScreen isActive={activeTab === 'trading'} />
+            </View>
+            <View style={[styles.tabContentPane, { display: activeTab === 'signals' ? 'flex' : 'none' }]}>
+              <GlobalSignalsScreen isActive={activeTab === 'signals'} />
             </View>
             <View style={[styles.tabContentPane, { display: activeTab === 'recession' ? 'flex' : 'none' }]}>
               <RecessionScreen />

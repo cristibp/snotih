@@ -293,4 +293,56 @@ export interface WatchlistHistoryResponse {
   previousClose?: number;
 }
 
+// ─── Global Market Signals (Futures & Forex Pre-Market) ───
+
+export type SignalImpact = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+
+export interface GlobalMarketSignal {
+  id: string;
+  name: string;
+  symbol: string;
+  category: 'US_FUTURES' | 'JP_FUTURES' | 'JP_SPOT' | 'FOREX';
+  currentPrice: number;
+  previousClose: number;
+  change: number;
+  changePercent: number;
+  impact: SignalImpact;
+  impactScore: number;
+  impactIcon: string;
+  impactLabel: string;
+  tradingHoursRO: string;
+  description: string;
+  relevanceNote: string;
+  isAvailable: boolean;
+  lastUpdated: string;
+  source: 'yahoo' | 'finnhub' | 'cached';
+}
+
+export interface CategorySentiment {
+  impact: SignalImpact;
+  score: number;
+  description: string;
+}
+
+export interface GlobalSentiment {
+  impact: SignalImpact;
+  score: number;
+  confidencePercent: number;
+  label: string;
+  icon: string;
+}
+
+export interface GlobalSignalsResult {
+  timestamp: string;
+  evaluationDate: string;
+  evaluationTime: string;
+  signals: GlobalMarketSignal[];
+  usMarketSentiment: CategorySentiment;
+  jpMarketSentiment: CategorySentiment;
+  forexSentiment: CategorySentiment;
+  globalSentiment: GlobalSentiment;
+  summary: string;
+  reasoning: string[];
+}
+
 
