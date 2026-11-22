@@ -35,6 +35,16 @@ const GOOGLE_REDIRECT_URI =
 
 const FRONTEND_URL = process.env.FRONTEND_URL || (isProd ? 'https://snoti.onrender.com' : 'http://localhost:3000');
 
+// ── Startup diagnostics ──
+console.log('[Auth Config]', {
+  NODE_ENV: process.env.NODE_ENV,
+  isProd,
+  GOOGLE_REDIRECT_URI,
+  GOOGLE_REDIRECT_URI_ENV_RAW: process.env.GOOGLE_REDIRECT_URI ?? '(not set)',
+  FRONTEND_URL,
+  GOOGLE_CLIENT_ID_SET: !!GOOGLE_CLIENT_ID,
+});
+
 function clientIp(req: Request): string {
   const fwd = req.headers['x-forwarded-for'];
   return typeof fwd === 'string' ? fwd.split(',')[0].trim() : req.socket.remoteAddress || '127.0.0.1';
@@ -92,6 +102,8 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 /** Step 1 – redirect to Google consent screen */
 authRouter.get('/api/auth/google', (_req: Request, res: Response) => {
+  console.log('[OAuth Step 1] Initiating Google OAuth with redirect_uri:', GOOGLE_REDIRECT_URI);
+
   const state = crypto.randomBytes(16).toString('hex');
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
@@ -112,7 +124,9 @@ authRouter.get('/api/auth/google', (_req: Request, res: Response) => {
     prompt: 'select_account',
   });
 
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  console.log('[OAuth Step 1] Full auth URL redirect_uri param:', params.get('redirect_uri'));
+  res.redirect(authUrl);
 });
 
 /** Step 2 – Google redirects back with ?code=&state= */
@@ -130,6 +144,7 @@ authRouter.get('/api/auth/google/callback', async (req: Request, res: Response) 
 
   try {
     // Exchange code for tokens
+    console.log('[OAuth Step 2] Exchanging code with redirect_uri:', GOOGLE_REDIRECT_URI);
     const tokenRes = await axios.post<{
       access_token: string;
       id_token: string;
