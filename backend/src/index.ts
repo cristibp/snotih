@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import axios from 'axios';
 
@@ -41,6 +42,8 @@ import { loadWatchlistSymbols } from './services/watchlistCsvLoader';
 import { getQuotesForSymbols } from './services/marketQuoteService';
 import { fetchWatchlistCandles } from './services/marketHistoryService';
 import { ExchangeRates, RsiCheckResponse } from './types';
+import { authRouter, requireAuth } from './routes/authRoutes';
+import { emailRoleStore } from './services/emailRoleStore';
 
 dotenv.config();
 
@@ -48,8 +51,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || true,
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+// Auth routes (Google OAuth, /api/auth/me, /api/auth/logout, /api/admin/sessions)
+app.use(authRouter);
 
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', service: 'curs-valutar-backend' });
@@ -460,41 +470,41 @@ app.post('/api/trigger-webhook', async (req, res) => {
       },
       previousDay: prevDay
         ? {
-            date: prevDay.date,
-            eurRonBnr: prevDay.eurRonBnr,
-            ronEur: prevRonEur !== null ? parseFloat(prevRonEur.toFixed(5)) : null,
-            eurUsdYahoo: prevDay.eurUsdYahoo,
-            ronToUsd100: prevRonToUsd100 !== null ? parseFloat(prevRonToUsd100.toFixed(2)) : null,
-          }
+          date: prevDay.date,
+          eurRonBnr: prevDay.eurRonBnr,
+          ronEur: prevRonEur !== null ? parseFloat(prevRonEur.toFixed(5)) : null,
+          eurUsdYahoo: prevDay.eurUsdYahoo,
+          ronToUsd100: prevRonToUsd100 !== null ? parseFloat(prevRonToUsd100.toFixed(2)) : null,
+        }
         : null,
       comparisonPreviousDay:
         prevDay && diffEurRon !== null && pctEurRon !== null && diffEurUsd !== null && pctEurUsd !== null && diffRonToUsd !== null && pctRonToUsd !== null
           ? {
-              eurRonBnr: {
-                diff: parseFloat(diffEurRon.toFixed(4)),
-                deviationPercent: parseFloat(pctEurRon.toFixed(4)),
-                formattedDiff: formatDiff(diffEurRon, 4),
-                formattedPercent: formatPct(pctEurRon),
-              },
-              ronEur: {
-                diff: diffRonEur !== null ? parseFloat(diffRonEur.toFixed(5)) : 0,
-                deviationPercent: pctRonEur !== null ? parseFloat(pctRonEur.toFixed(4)) : 0,
-                formattedDiff: diffRonEur !== null ? formatDiff(diffRonEur, 5) : '+0.00000',
-                formattedPercent: pctRonEur !== null ? formatPct(pctRonEur) : '+0.00%',
-              },
-              eurUsdYahoo: {
-                diff: parseFloat(diffEurUsd.toFixed(4)),
-                deviationPercent: parseFloat(pctEurUsd.toFixed(4)),
-                formattedDiff: formatDiff(diffEurUsd, 4),
-                formattedPercent: formatPct(pctEurUsd),
-              },
-              ronToUsd100: {
-                diff: parseFloat(diffRonToUsd.toFixed(2)),
-                deviationPercent: parseFloat(pctRonToUsd.toFixed(4)),
-                formattedDiff: formatDiff(diffRonToUsd, 2),
-                formattedPercent: formatPct(pctRonToUsd),
-              },
-            }
+            eurRonBnr: {
+              diff: parseFloat(diffEurRon.toFixed(4)),
+              deviationPercent: parseFloat(pctEurRon.toFixed(4)),
+              formattedDiff: formatDiff(diffEurRon, 4),
+              formattedPercent: formatPct(pctEurRon),
+            },
+            ronEur: {
+              diff: diffRonEur !== null ? parseFloat(diffRonEur.toFixed(5)) : 0,
+              deviationPercent: pctRonEur !== null ? parseFloat(pctRonEur.toFixed(4)) : 0,
+              formattedDiff: diffRonEur !== null ? formatDiff(diffRonEur, 5) : '+0.00000',
+              formattedPercent: pctRonEur !== null ? formatPct(pctRonEur) : '+0.00%',
+            },
+            eurUsdYahoo: {
+              diff: parseFloat(diffEurUsd.toFixed(4)),
+              deviationPercent: parseFloat(pctEurUsd.toFixed(4)),
+              formattedDiff: formatDiff(diffEurUsd, 4),
+              formattedPercent: formatPct(pctEurUsd),
+            },
+            ronToUsd100: {
+              diff: parseFloat(diffRonToUsd.toFixed(2)),
+              deviationPercent: parseFloat(pctRonToUsd.toFixed(4)),
+              formattedDiff: formatDiff(diffRonToUsd, 2),
+              formattedPercent: formatPct(pctRonToUsd),
+            },
+          }
           : null,
       averagesLast30Days: {
         eurRonBnr: {
@@ -554,34 +564,34 @@ app.post('/api/trigger-webhook', async (req, res) => {
       },
       previousMonth: prevMonthStats
         ? {
-            month: prevMonthStats.month,
-            formattedMonth,
-            eurRonBnr: {
-              ...prevMonthStats.eurRonBnr,
-              minDeviationPercent: parseFloat(pctMinEurRon.toFixed(4)),
-              maxDeviationPercent: parseFloat(pctMaxEurRon.toFixed(4)),
-              formattedMinDeviation: formatPct(pctMinEurRon),
-              formattedMaxDeviation: formatPct(pctMaxEurRon),
-            },
-            eurUsdYahoo: {
-              ...prevMonthStats.eurUsdYahoo,
-              minDeviationPercent: parseFloat(pctMinEurUsd.toFixed(4)),
-              maxDeviationPercent: parseFloat(pctMaxEurUsd.toFixed(4)),
-              formattedMinDeviation: formatPct(pctMinEurUsd),
-              formattedMaxDeviation: formatPct(pctMaxEurUsd),
-            },
-            ...(prevMonthRonToUsdStats
-              ? {
-                  ronToUsd100: {
-                    ...prevMonthRonToUsdStats,
-                    minDeviationPercent: parseFloat(pctMinRonUsd.toFixed(4)),
-                    maxDeviationPercent: parseFloat(pctMaxRonUsd.toFixed(4)),
-                    formattedMinDeviation: formatPct(pctMinRonUsd),
-                    formattedMaxDeviation: formatPct(pctMaxRonUsd),
-                  },
-                }
-              : {}),
-          }
+          month: prevMonthStats.month,
+          formattedMonth,
+          eurRonBnr: {
+            ...prevMonthStats.eurRonBnr,
+            minDeviationPercent: parseFloat(pctMinEurRon.toFixed(4)),
+            maxDeviationPercent: parseFloat(pctMaxEurRon.toFixed(4)),
+            formattedMinDeviation: formatPct(pctMinEurRon),
+            formattedMaxDeviation: formatPct(pctMaxEurRon),
+          },
+          eurUsdYahoo: {
+            ...prevMonthStats.eurUsdYahoo,
+            minDeviationPercent: parseFloat(pctMinEurUsd.toFixed(4)),
+            maxDeviationPercent: parseFloat(pctMaxEurUsd.toFixed(4)),
+            formattedMinDeviation: formatPct(pctMinEurUsd),
+            formattedMaxDeviation: formatPct(pctMaxEurUsd),
+          },
+          ...(prevMonthRonToUsdStats
+            ? {
+              ronToUsd100: {
+                ...prevMonthRonToUsdStats,
+                minDeviationPercent: parseFloat(pctMinRonUsd.toFixed(4)),
+                maxDeviationPercent: parseFloat(pctMaxRonUsd.toFixed(4)),
+                formattedMinDeviation: formatPct(pctMinRonUsd),
+                formattedMaxDeviation: formatPct(pctMaxRonUsd),
+              },
+            }
+            : {}),
+        }
         : null,
       intradayAverage: intradayAvg,
       predictor,
@@ -1095,6 +1105,7 @@ app.get('/api/watchlist/history/:symbol', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Serverul ruleaza pe portul ${PORT}`);
+  console.log(`[Auth] emailRoleStore loaded. Google OAuth PKCE: ON`);
 
   backfill10YearsIfNeeded()
     .then(() => backfillCurrentMonthIfNeeded())

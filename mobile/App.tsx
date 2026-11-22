@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeScreen from './src/screens/HomeScreen';
 import WatchlistScreen from './src/screens/WatchlistScreen';
 import TradingScreen from './src/screens/TradingScreen';
 import RecessionScreen from './src/screens/RecessionScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { useAuth } from './src/hooks/useAuth';
 
-export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession';
+export type TabType = 'rates' | 'watchlist' | 'trading' | 'recession' | 'settings';
 export const TAB_STORAGE_KEY = '@snotih_app_active_tab';
 
 function getInitialTab(): TabType {
@@ -32,6 +35,7 @@ function getInitialTab(): TabType {
 function MainApp() {
   const [activeTab, setActiveTabState] = useState<TabType>(getInitialTab);
   const { isBlack, colors, toggleTheme } = useTheme();
+  const { user, loading: authLoading, logout } = useAuth();
 
   // Load persisted tab on mount (for native mobile via AsyncStorage)
   useEffect(() => {
@@ -44,7 +48,8 @@ function MainApp() {
           (storedTab === 'rates' ||
             storedTab === 'watchlist' ||
             storedTab === 'trading' ||
-            storedTab === 'recession')
+            storedTab === 'recession' ||
+            storedTab === 'settings')
         ) {
           setActiveTabState(storedTab);
         }
@@ -73,128 +78,175 @@ function MainApp() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={colors.statusBar}
-        backgroundColor={colors.nav}
-      />
-      <View style={[styles.navBar, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
-        <View style={styles.navContentRow}>
-          <View style={[styles.segmentedControl, { backgroundColor: colors.segmentBackground }]}>
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                activeTab === 'rates' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
-              ]}
-              onPress={() => handleTabPress('rates')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  { color: colors.segmentText },
-                  activeTab === 'rates' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
-                ]}
-                numberOfLines={1}
-              >
-                💶 Curs
-              </Text>
-            </TouchableOpacity>
+      {/* ── Auth loading splash ── */}
+      {authLoading && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" />
+        </View>
+      )}
 
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                activeTab === 'watchlist' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
-              ]}
-              onPress={() => handleTabPress('watchlist')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  { color: colors.segmentText },
-                  activeTab === 'watchlist' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
-                ]}
-                numberOfLines={1}
-              >
-                📊 Watchlist
-              </Text>
-            </TouchableOpacity>
+      {/* ── Not signed in → show Login screen ── */}
+      {!authLoading && !user && <LoginScreen />}
 
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                activeTab === 'trading' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
-              ]}
-              onPress={() => handleTabPress('trading')}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  { color: colors.segmentText },
-                  activeTab === 'trading' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
-                ]}
-                numberOfLines={1}
-              >
-                📈 RSI
-              </Text>
-            </TouchableOpacity>
+      {/* ── Signed in → show full app ── */}
+      {!authLoading && user && (
+        <>
+          <StatusBar
+            barStyle={colors.statusBar}
+            backgroundColor={colors.nav}
+          />
+          <View style={[styles.navBar, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
+            <View style={styles.navContentRow}>
+              <View style={[styles.segmentedControl, { backgroundColor: colors.segmentBackground }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.segmentButton,
+                    activeTab === 'rates' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+                  ]}
+                  onPress={() => handleTabPress('rates')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: colors.segmentText },
+                      activeTab === 'rates' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    💶 Curs
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.segmentButton,
-                activeTab === 'recession' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
-              ]}
-              onPress={() => handleTabPress('recession')}
-              activeOpacity={0.8}
-            >
-              <Text
+                <TouchableOpacity
+                  style={[
+                    styles.segmentButton,
+                    activeTab === 'watchlist' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+                  ]}
+                  onPress={() => handleTabPress('watchlist')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: colors.segmentText },
+                      activeTab === 'watchlist' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    📊 Watchlist
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.segmentButton,
+                    activeTab === 'trading' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+                  ]}
+                  onPress={() => handleTabPress('trading')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: colors.segmentText },
+                      activeTab === 'trading' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    📈 RSI
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.segmentButton,
+                    activeTab === 'recession' && [styles.segmentButtonActive, { backgroundColor: colors.segmentActive }],
+                  ]}
+                  onPress={() => handleTabPress('recession')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: colors.segmentText },
+                      activeTab === 'recession' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    📉 Recesiune
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Theme Toggle Button */}
+              <TouchableOpacity
                 style={[
-                  styles.segmentText,
-                  { color: colors.segmentText },
-                  activeTab === 'recession' && [styles.segmentTextActive, { color: colors.segmentTextActive }],
+                  styles.themeToggle,
+                  {
+                    backgroundColor: colors.toggleBtnBg,
+                    borderColor: colors.toggleBtnBorder,
+                  },
                 ]}
-                numberOfLines={1}
+                onPress={toggleTheme}
+                activeOpacity={0.7}
+                accessibilityLabel={isBlack ? 'Comută pe tema luminoasă' : 'Comută pe tema neagră'}
               >
-                📉 Recesiune
-              </Text>
-            </TouchableOpacity>
+                <Text style={styles.themeToggleIcon}>
+                  {isBlack ? '☀️' : '🌙'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* ── Admin-only Settings button ── */}
+              {user.role === 'admin' && (
+                <TouchableOpacity
+                  style={[
+                    styles.themeToggle,
+                    activeTab === 'settings' && { backgroundColor: colors.segmentActive },
+                    { borderColor: colors.toggleBtnBorder, backgroundColor: colors.toggleBtnBg },
+                  ]}
+                  onPress={() => handleTabPress('settings')}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Admin Settings"
+                >
+                  <Text style={styles.themeToggleIcon}>⚙️</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* ── Logout button ── */}
+              <TouchableOpacity
+                style={[styles.themeToggle, { borderColor: colors.toggleBtnBorder, backgroundColor: colors.toggleBtnBg }]}
+                onPress={logout}
+                activeOpacity={0.7}
+                accessibilityLabel="Sign out"
+              >
+                <Text style={styles.themeToggleIcon}>🚪</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Theme Toggle Button */}
-          <TouchableOpacity
-            style={[
-              styles.themeToggle,
-              {
-                backgroundColor: colors.toggleBtnBg,
-                borderColor: colors.toggleBtnBorder,
-              },
-            ]}
-            onPress={toggleTheme}
-            activeOpacity={0.7}
-            accessibilityLabel={isBlack ? 'Comută pe tema luminoasă' : 'Comută pe tema neagră'}
-          >
-            <Text style={styles.themeToggleIcon}>
-              {isBlack ? '☀️' : '🌙'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
-        <View style={[styles.tabContentPane, { display: activeTab === 'rates' ? 'flex' : 'none' }]}>
-          <HomeScreen />
-        </View>
-        <View style={[styles.tabContentPane, { display: activeTab === 'watchlist' ? 'flex' : 'none' }]}>
-          <WatchlistScreen isActive={activeTab === 'watchlist'} />
-        </View>
-        <View style={[styles.tabContentPane, { display: activeTab === 'trading' ? 'flex' : 'none' }]}>
-          <TradingScreen isActive={activeTab === 'trading'} />
-        </View>
-        <View style={[styles.tabContentPane, { display: activeTab === 'recession' ? 'flex' : 'none' }]}>
-          <RecessionScreen />
-        </View>
-      </View>
+          <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
+            <View style={[styles.tabContentPane, { display: activeTab === 'rates' ? 'flex' : 'none' }]}>
+              <HomeScreen />
+            </View>
+            <View style={[styles.tabContentPane, { display: activeTab === 'watchlist' ? 'flex' : 'none' }]}>
+              <WatchlistScreen isActive={activeTab === 'watchlist'} />
+            </View>
+            <View style={[styles.tabContentPane, { display: activeTab === 'trading' ? 'flex' : 'none' }]}>
+              <TradingScreen isActive={activeTab === 'trading'} />
+            </View>
+            <View style={[styles.tabContentPane, { display: activeTab === 'recession' ? 'flex' : 'none' }]}>
+              <RecessionScreen />
+            </View>
+            {/* Admin-only: Settings / Session Management */}
+            {user.role === 'admin' && activeTab === 'settings' && (
+              <View style={styles.tabContentPane}>
+                <SettingsScreen currentUserEmail={user.email} />
+              </View>
+            )}
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
