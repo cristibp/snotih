@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { RsiAlertTier, RsiSymbolResult, VixAlertResult } from '../types';
+import { normalizeDiscordWebhookUrl } from './webhookService';
 
 const HTTP_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -378,16 +379,18 @@ export function formatDiscordWebhookRequest() {
  * Trimite notificarile de alerta pe canalul Discord #trading (RSI + VIX).
  */
 export async function sendTradingDiscordAlert(
-  webhookUrl: string,
+  rawWebhookUrl: string,
   triggeredResults: RsiSymbolResult[],
   vixResult?: VixAlertResult
 ): Promise<{ success: boolean; status?: number; error?: string }> {
   const hasRsi = Array.isArray(triggeredResults) && triggeredResults.length > 0;
   const hasVix = Boolean(vixResult && vixResult.thresholdSurpassed);
 
-  if (!webhookUrl || (!hasRsi && !hasVix)) {
+  if (!rawWebhookUrl || (!hasRsi && !hasVix)) {
     return { success: false, error: 'No webhook URL or no triggered alerts.' };
   }
+
+  const webhookUrl = normalizeDiscordWebhookUrl(rawWebhookUrl);
 
   try {
     const embeds: any[] = [];
@@ -512,7 +515,11 @@ export async function sendTradingDiscordAlert(
     });
     return { success: true, status: res.status };
   } catch (err: any) {
-    console.error('[AlertService] Eroare la trimiterea notificarii pe Discord #trading:', err?.message || err);
-    return { success: false, error: err?.message || String(err) };
+    const errorDetails =
+      (typeof err?.response?.data === 'object' && err.response.data?.message)
+        ? `${err.message}: ${err.response.data.message}`
+        : err?.message || String(err);
+    console.error('[AlertService] Eroare la trimiterea notificarii pe Discord #trading:', errorDetails);
+    return { success: false, error: errorDetails };
   }
 }

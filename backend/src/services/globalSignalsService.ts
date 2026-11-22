@@ -3,6 +3,7 @@ import { GlobalMarketSignal, GlobalSignalsResult, SignalImpact } from '../types'
 import { getQuoteForSymbol } from './marketQuoteService';
 import { getBucharestDateTime } from './intradayService';
 import { formatDiscordWebhookRequest } from './rsiService';
+import { normalizeDiscordWebhookUrl } from './webhookService';
 
 // ─── Configurare Indicatori (cele 8 repere cerute) ───
 
@@ -491,22 +492,28 @@ export function formatGlobalSignalsDiscordSection(result: GlobalSignalsResult): 
 export async function sendGlobalSignalsDiscordAlert(
   customWebhookUrl?: string
 ): Promise<{ success: boolean; status?: number; error?: string; result?: GlobalSignalsResult }> {
-  const webhookUrl =
+  const rawWebhookUrl =
     customWebhookUrl ||
     process.env.DISCORD_TRADING_WEBHOOK_URL ||
     process.env.TRADING_WEBHOOK_URL ||
-    process.env.DISCORD_WEBHOOK_URL;
+    process.env.DISCORD_WEBHOOK_URL ||
+    process.env.WEBHOOK_URL;
 
-  if (!webhookUrl) {
+  if (!rawWebhookUrl) {
     return {
       success: false,
-      error: 'DISCORD_TRADING_WEBHOOK_URL nu este configurat în variabilele de mediu.',
+      error: 'DISCORD_TRADING_WEBHOOK_URL (sau TRADING_WEBHOOK_URL) nu este configurat în variabilele de mediu ale serverului.',
     };
   }
 
+  const webhookUrl = normalizeDiscordWebhookUrl(rawWebhookUrl);
+
   try {
     const result = await evaluateGlobalSignals();
-    const content = formatGlobalSignalsDiscordSection(result);
+    let content = formatGlobalSignalsDiscordSection(result);
+    if (content.length > 2000) {
+      content = content.slice(0, 1996) + '...';
+    }
 
     const embedColor =
       result.globalSentiment.impact === 'POSITIVE'
@@ -559,8 +566,12 @@ export async function sendGlobalSignalsDiscordAlert(
     console.log(`[GlobalSignals] Notificare trimisă cu succes pe canalul #trading (Status: ${res.status})`);
     return { success: true, status: res.status, result };
   } catch (err: any) {
-    console.error('[GlobalSignals] Eroare la trimiterea raportului pe Discord #trading:', err?.message || err);
-    return { success: false, error: err?.message || String(err) };
+    const errorDetails =
+      (typeof err?.response?.data === 'object' && err.response.data?.message)
+        ? `${err.message}: ${err.response.data.message}`
+        : err?.message || String(err);
+    console.error('[GlobalSignals] Eroare la trimiterea raportului pe Discord #trading:', errorDetails);
+    return { success: false, error: errorDetails };
   }
 }
 

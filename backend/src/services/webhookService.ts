@@ -36,12 +36,26 @@ export function describeWebhookError(error: unknown) {
   };
 }
 
+/**
+ * Normalizeaza URL-ul de webhook Discord. Daca se foloseste proxy-ul Cloudflare,
+ * inlocuieste prefixul gresit /api/webhooks/ cu /webhooks/, intrucat worker-ul proxy
+ * adauga el insusi prefixul /api inainte de apelul upstream catre Discord.
+ */
+export function normalizeDiscordWebhookUrl(url: string): string {
+  if (!url || typeof url !== 'string') return url;
+  return url.trim().replace(
+    /^(https?:\/\/discord-api-proxy[^/]+)\/api\/webhooks\//,
+    '$1/webhooks/'
+  );
+}
+
 export async function sendRatesWebhook(
-  webhookUrl: string,
+  rawWebhookUrl: string,
   payload: Record<string, any>,
   chartBuffer: Buffer | null,
   headers: Record<string, string>
 ): Promise<{ chartAttached: boolean; webhookStatus: number }> {
+  const webhookUrl = normalizeDiscordWebhookUrl(rawWebhookUrl);
   // Proxy-ul Discord foloseste /webhooks/... si adauga el prefixul /api.
   // Recunoastem si rutele directe /api/webhooks/... sau /api/v10/webhooks/...
   // pentru a aplica limita Discord indiferent de destinatie.
