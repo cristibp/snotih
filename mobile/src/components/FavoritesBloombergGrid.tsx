@@ -149,10 +149,11 @@ export default function FavoritesBloombergGrid({
       ? 3
       : 2;
   const cardGap = isKiosk ? 10 : 8;
-  const paddingHoriz = isKiosk ? 6 : 8;
+  const paddingLeft = 8;
+  const paddingRight = isKiosk ? 28 : 8;
   const cardWidth = Math.max(
     140,
-    Math.floor((gridWidth - paddingHoriz * 2 - (numColumns - 1) * cardGap) / numColumns)
+    Math.floor((gridWidth - paddingLeft - paddingRight - (numColumns - 1) * cardGap) / numColumns)
   );
 
   // Render card individual Bloomberg
@@ -467,6 +468,7 @@ export default function FavoritesBloombergGrid({
         {
           backgroundColor: isBlack ? '#0F172A' : colors.card,
           borderColor: colors.cardBorder,
+          paddingRight: isKiosk ? 24 : 8,
         },
       ]}
       onLayout={onLayout}
@@ -607,7 +609,7 @@ export default function FavoritesBloombergGrid({
           style={styles.gridScrollView}
           contentContainerStyle={[
             styles.gridContentContainer,
-            { paddingHorizontal: paddingHoriz },
+            { paddingLeft, paddingRight },
           ]}
           showsVerticalScrollIndicator={true}
         >

@@ -157,10 +157,11 @@ export default function WatchlistChart({
 
   // Calcule geometrice pentru SVG
   const paddingLeft = 48;
-  const paddingRight = 14;
+  const paddingRight = isKiosk ? 36 : 14;
   const paddingTop = 14;
   const paddingBottom = 24;
-  const plotWidth = Math.max(containerWidth - paddingLeft - paddingRight, 100);
+  const svgWidth = Math.max(containerWidth - 24, 100);
+  const plotWidth = Math.max(svgWidth - paddingLeft - paddingRight, 100);
   const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 50);
 
   const { points, minVal, maxVal, isUpTrend, svgLinePath, svgAreaPath } = useMemo(() => {
@@ -540,7 +541,7 @@ export default function WatchlistChart({
             </Text>
           </View>
         ) : (
-          <Svg width={containerWidth - 24} height={chartHeight}>
+          <Svg width={svgWidth} height={chartHeight}>
             <Defs>
               <LinearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                 <Stop offset="0%" stopColor={accentColor} stopOpacity="0.35" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -175,7 +176,11 @@ export default function WatchlistScreen({
                 </Text>
               </View>
             ) : (
-              <View style={styles.cardsContainer}>
+              <ScrollView
+                style={styles.cardsScroll}
+                contentContainerStyle={styles.cardsContainer}
+                showsVerticalScrollIndicator={false}
+              >
                 {favorites.map((sym) => (
                   <FavoriteCard
                     key={sym}
@@ -185,7 +190,7 @@ export default function WatchlistScreen({
                     onSelect={setSelectedSymbol}
                   />
                 ))}
-              </View>
+              </ScrollView>
             )}
 
             {/* Add favorites button */}
@@ -358,6 +363,7 @@ const styles = StyleSheet.create({
   },
   containerKiosk: {
     padding: 4,
+    paddingRight: 28, // Pastreaza mai mult spatiu la dreapta pt modul kiosk
   },
   contentRow: {
     flex: 1,
@@ -400,9 +406,12 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 11,
   },
-  cardsContainer: {
+  cardsScroll: {
     flex: 1,
-    justifyContent: 'flex-start',
+    marginVertical: 4,
+  },
+  cardsContainer: {
+    paddingBottom: 4,
   },
   addFavBtn: {
     height: 34,

@@ -35,7 +35,6 @@ export default function FavoritesSetupModal({
 }: FavoritesSetupModalProps) {
   const { colors, isBlack } = useTheme();
   const [selectedFavs, setSelectedFavs] = useState<string[]>(currentFavorites);
-  const [capLimit, setCapLimit] = useState<number>(5);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const activeList = useMemo(
@@ -47,7 +46,6 @@ export default function FavoritesSetupModal({
   React.useEffect(() => {
     if (visible) {
       setSelectedFavs(currentFavorites);
-      setCapLimit(Math.max(5, currentFavorites.length));
       setSearchQuery('');
     }
   }, [visible, currentFavorites]);
@@ -70,9 +68,6 @@ export default function FavoritesSetupModal({
     if (isSelected) {
       setSelectedFavs(selectedFavs.filter((s) => s !== symbol));
     } else {
-      if (selectedFavs.length >= capLimit) {
-        return; // Atingem limita maxima admisa
-      }
       setSelectedFavs([...selectedFavs, symbol]);
     }
   };
@@ -97,7 +92,6 @@ export default function FavoritesSetupModal({
 
   const handleResetDefaults = () => {
     setSelectedFavs(DEFAULT_FAVORITES);
-    setCapLimit(5);
   };
 
   const handleSave = () => {
@@ -132,8 +126,8 @@ export default function FavoritesSetupModal({
               </Text>
               <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
                 {activeList
-                  ? `Listă: ${activeList.icon || '⭐'} ${activeList.name} • până la ${capLimit} simboluri`
-                  : `Selectează până la ${capLimit} simboluri pentru ecranul 800×480 WVGA`}
+                  ? `Listă: ${activeList.icon || '⭐'} ${activeList.name} • ${selectedFavs.length} ${selectedFavs.length === 1 ? 'simbol selectat' : 'simboluri selectate'}`
+                  : `Selectează simbolurile favorite (${selectedFavs.length} selectate)`}
               </Text>
             </View>
 
@@ -195,7 +189,7 @@ export default function FavoritesSetupModal({
             </View>
           )}
 
-          {/* Stepper limita si Badge numar selectate */}
+          {/* Contor numar selectate si indicator fara limita */}
           <View style={styles.controlsBar}>
             <View style={styles.badgeCounter}>
               <Text style={[styles.counterLabel, { color: colors.textMuted }]}>
@@ -205,55 +199,22 @@ export default function FavoritesSetupModal({
                 style={[
                   styles.countPill,
                   {
-                    backgroundColor:
-                      selectedFavs.length === capLimit
-                        ? 'rgba(245, 158, 11, 0.2)'
-                        : 'rgba(59, 130, 246, 0.2)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.countPillText,
-                    {
-                      color:
-                        selectedFavs.length === capLimit ? '#F59E0B' : '#3B82F6',
-                    },
-                  ]}
-                >
-                  {selectedFavs.length} / {capLimit}
+                <Text style={[styles.countPillText, { color: '#3B82F6' }]}>
+                  {selectedFavs.length} {selectedFavs.length === 1 ? 'simbol' : 'simboluri'}
                 </Text>
               </View>
             </View>
 
-            {/* Stepper pentru limita cap X */}
-            <View style={styles.capStepper}>
-              <Text style={[styles.stepperLabel, { color: colors.textMuted }]}>
-                Cap ecran:
+            <View style={styles.unlimitedBadge}>
+              <Text style={[styles.unlimitedText, { color: '#10B981' }]}>
+                ✓ Fără limită de simboluri
               </Text>
-              <TouchableOpacity
-                style={[styles.stepBtn, { borderColor: colors.cardBorder }]}
-                onPress={() => setCapLimit(Math.max(2, capLimit - 1))}
-                disabled={capLimit <= 2}
-              >
-                <Text style={[styles.stepBtnText, { color: colors.text }]}>-</Text>
-              </TouchableOpacity>
-              <Text style={[styles.capNumber, { color: colors.text }]}>{capLimit}</Text>
-              <TouchableOpacity
-                style={[styles.stepBtn, { borderColor: colors.cardBorder }]}
-                onPress={() => setCapLimit(Math.min(8, capLimit + 1))}
-                disabled={capLimit >= 8}
-              >
-                <Text style={[styles.stepBtnText, { color: colors.text }]}>+</Text>
-              </TouchableOpacity>
             </View>
           </View>
-
-          {capLimit > 5 && (
-            <Text style={styles.advisoryText}>
-              ⚠️ Setarea a mai mult de 5 favorite poate necesita scroll vertical pe Allview AX4 Nano (480px).
-            </Text>
-          )}
 
           {/* Sectiunea de favorite selectate si ordonabile */}
           <View style={styles.selectedSection}>
@@ -339,7 +300,6 @@ export default function FavoritesSetupModal({
           <ScrollView style={styles.symbolList} showsVerticalScrollIndicator={true}>
             {filteredCatalog.map((item) => {
               const isChecked = selectedFavs.includes(item.symbol);
-              const isDisabled = !isChecked && selectedFavs.length >= capLimit;
 
               return (
                 <TouchableOpacity
@@ -348,11 +308,9 @@ export default function FavoritesSetupModal({
                     styles.symbolRow,
                     {
                       borderBottomColor: isBlack ? '#1E293B' : '#F1F5F9',
-                      opacity: isDisabled ? 0.45 : 1,
                     },
                   ]}
                   onPress={() => handleToggle(item.symbol)}
-                  disabled={isDisabled}
                   activeOpacity={0.7}
                 >
                   <View style={styles.symbolInfo}>
@@ -485,36 +443,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  capStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  stepperLabel: {
-    fontSize: 11,
-  },
-  stepBtn: {
-    width: 26,
-    height: 26,
+  unlimitedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
   },
-  stepBtnText: {
-    fontSize: 14,
+  unlimitedText: {
+    fontSize: 11,
     fontWeight: '700',
-  },
-  capNumber: {
-    fontSize: 13,
-    fontWeight: '700',
-    minWidth: 18,
-    textAlign: 'center',
-  },
-  advisoryText: {
-    fontSize: 10,
-    color: '#F59E0B',
-    marginTop: 4,
   },
   selectedSection: {
     marginTop: 8,

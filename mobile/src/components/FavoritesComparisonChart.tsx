@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -129,10 +130,11 @@ export default function FavoritesComparisonChart({
     ? Math.max(250, Math.min(containerHeight - 120, 520))
     : 210;
   const paddingLeft = 48;
-  const paddingRight = 14;
+  const paddingRight = isKiosk ? 36 : 14;
   const paddingTop = 14;
   const paddingBottom = 24;
-  const plotWidth = Math.max(containerWidth - paddingLeft - paddingRight, 100);
+  const svgWidth = Math.max(containerWidth - 24, 100);
+  const plotWidth = Math.max(svgWidth - paddingLeft - paddingRight, 100);
   const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 50);
 
   // Normalizam fiecare serie la % variatie din primul punct (baza 0%)
@@ -363,7 +365,11 @@ export default function FavoritesComparisonChart({
       </View>
 
       {/* Scrubber Value Pill Bar */}
-      <View style={styles.metricsBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.metricsBar}
+      >
         {favorites.map((sym, idx) => {
           const s = normalizedSeries[sym];
           const color = PALETTE[idx % PALETTE.length];
@@ -419,7 +425,7 @@ export default function FavoritesComparisonChart({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* Chart Canvas Area */}
       <View
@@ -445,7 +451,7 @@ export default function FavoritesComparisonChart({
             </Text>
           </View>
         ) : (
-          <Svg width={containerWidth - 24} height={chartHeight}>
+          <Svg width={svgWidth} height={chartHeight}>
             {/* Linii orizontale de grid Y-axis (% variatie) */}
             {yTicks.map((tick, i) => {
               const isZero = Math.abs(tick.pct) < 0.05;
@@ -675,14 +681,15 @@ const styles = StyleSheet.create({
   },
   metricsBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 6,
     marginVertical: 4,
+    paddingRight: 28,
   },
   metricPill: {
-    flex: 1,
+    minWidth: 72,
     paddingVertical: 4,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
     borderRadius: 6,
     alignItems: 'center',
   },
