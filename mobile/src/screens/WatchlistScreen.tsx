@@ -7,11 +7,13 @@ import {
   View,
 } from 'react-native';
 import FavoriteCard from '../components/FavoriteCard';
+import FavoriteListPicker from '../components/FavoriteListPicker';
 import FavoritesBloombergGrid from '../components/FavoritesBloombergGrid';
 import FavoritesComparisonChart from '../components/FavoritesComparisonChart';
 import FavoritesSetupModal from '../components/FavoritesSetupModal';
 import PollingDropdown from '../components/PollingDropdown';
 import WatchlistChart from '../components/WatchlistChart';
+import { useFavoriteLists } from '../hooks/useFavoriteLists';
 import { useWatchlistPolling } from '../hooks/useWatchlistPolling';
 import { useTheme } from '../theme/ThemeContext';
 import { exitWebFullscreen, requestWebFullscreen } from '../services/fullscreen';
@@ -51,11 +53,29 @@ export default function WatchlistScreen({
     }
   };
 
+  // ─── Multi-Favorite Lists (GitHub-backed) ───
+  const {
+    allLists,
+    activeList,
+    activeListId,
+    defaultListId,
+    createList,
+    updateListMeta,
+    deleteListById,
+    setDefault,
+    setSymbols: setListSymbols,
+    switchList,
+    isLoading: listsLoading,
+    isSaving: listsSaving,
+    error: listsError,
+  } = useFavoriteLists();
+
+  // ─── Watchlist Polling (using external favorites from GitHub lists) ───
+  const activeSymbols = activeList?.symbols || [];
   const {
     pollingInterval,
     setPollingInterval,
     favorites,
-    setFavorites,
     allSymbols,
     selectedSymbol,
     setSelectedSymbol,
@@ -65,7 +85,12 @@ export default function WatchlistScreen({
     error,
     countdown,
     manualRefresh,
-  } = useWatchlistPolling(isActive);
+  } = useWatchlistPolling(isActive, activeSymbols);
+
+  // Wrapper to save favorites through the multi-list system
+  const handleSaveFavorites = (newFavs: string[]) => {
+    setListSymbols(newFavs);
+  };
 
   return (
     <View style={[styles.container, isKiosk && styles.containerKiosk, { backgroundColor: colors.background }]}>
@@ -75,12 +100,19 @@ export default function WatchlistScreen({
         {!isKiosk && !isSidebarCollapsed && (
           <View style={styles.leftColumn}>
             <View style={styles.sidebarHeader}>
-              <View style={styles.sidebarTitleRow}>
-                <Text style={[styles.sidebarTitle, { color: colors.text }]}>Favorite</Text>
-                <Text style={[styles.sidebarCount, { color: colors.textMuted }]}>
-                  ({favorites.length})
-                </Text>
-              </View>
+              {/* Multi-List Picker replaces the old static title */}
+              <FavoriteListPicker
+                allLists={allLists}
+                activeListId={activeListId}
+                defaultListId={defaultListId}
+                isSaving={listsSaving}
+                onSwitchList={switchList}
+                onCreateList={createList}
+                onDeleteList={deleteListById}
+                onUpdateList={updateListMeta}
+                onSetDefault={setDefault}
+              />
+
               <View style={styles.sidebarActions}>
                 <TouchableOpacity
                   style={[
@@ -124,164 +156,125 @@ export default function WatchlistScreen({
                       borderColor: colors.cardBorder,
                     },
                   ]}
-                  onPress={() => handleToggleKiosk(true)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Mod Kiosk ecran complet"
-                >
-                  <Text style={styles.setupIconText}>⛶</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.setupIconBtn,
-                    {
-                      backgroundColor: isBlack ? '#1E293B' : colors.card,
-                      borderColor: colors.cardBorder,
-                    },
-                  ]}
                   onPress={() => setSetupModalVisible(true)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel="Configurare favorite"
+                  accessibilityLabel="Deschide configurarea simbolurilor favorite"
                 >
                   <Text style={styles.setupIconText}>⚙️</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Cards List */}
-            <View style={styles.cardsContainer}>
-              {favorites.map((sym) => (
-                <FavoriteCard
-                  key={sym}
-                  symbol={sym}
-                  quote={quotes[sym]}
-                  isSelected={selectedSymbol === sym && viewMode === 'detail'}
-                  onSelect={(selected) => {
-                    setSelectedSymbol(selected);
-                    setViewMode('detail');
-                  }}
-                />
-              ))}
-            </View>
+            {/* Loading state for lists */}
+            {listsLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.textMuted} />
+                <Text style={[styles.loadingText, { color: colors.textMuted }]}>
+                  Se încarcă listele...
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.cardsContainer}>
+                {favorites.map((sym) => (
+                  <FavoriteCard
+                    key={sym}
+                    symbol={sym}
+                    quote={quotes[sym]}
+                    isSelected={sym === selectedSymbol}
+                    onSelect={setSelectedSymbol}
+                  />
+                ))}
+              </View>
+            )}
 
-            {/* Bottom Setup Button */}
+            {/* Add favorites button */}
             <TouchableOpacity
               style={[
                 styles.addFavBtn,
                 {
-                  backgroundColor: isBlack ? '#1E293B' : colors.card,
                   borderColor: colors.cardBorder,
                 },
               ]}
               onPress={() => setSetupModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.addFavText, { color: '#3B82F6' }]}>
-                + Configurare ({favorites.length})
+              <Text style={[styles.addFavText, { color: colors.textMuted }]}>
+                + Adaugă simbol
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Right Column: Chart & Metrics Panel */}
+        {/* Right Column: Chart Area */}
         <View style={styles.rightColumn}>
-          {/* Header Bar with Polling Dropdown & View Mode Switcher */}
+          {/* Top Bar */}
           <View style={styles.topRightBar}>
             <View style={styles.viewModeTabs}>
-              {isSidebarCollapsed && (
+              {!isSidebarCollapsed ? null : (
                 <TouchableOpacity
                   style={[
                     styles.restoreSidebarBtn,
-                    { backgroundColor: isBlack ? '#1E293B' : colors.card, borderColor: colors.cardBorder },
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : colors.card,
+                      borderColor: colors.cardBorder,
+                    },
                   ]}
                   onPress={() => setIsSidebarCollapsed(false)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.7}
                 >
-                  <Text style={[styles.restoreSidebarText, { color: colors.text }]}>⇤ Favorite</Text>
+                  <Text style={[styles.restoreSidebarText, { color: colors.text }]}>☰</Text>
                 </TouchableOpacity>
               )}
-
-              <TouchableOpacity
-                style={[
-                  styles.viewModeTab,
-                  viewMode === 'detail' && [
-                    styles.viewModeTabActive,
-                    { backgroundColor: isBlack ? '#1E293B' : '#FFFFFF' },
-                  ],
-                ]}
-                onPress={() => setViewMode('detail')}
-                activeOpacity={0.8}
-              >
-                <Text
+              {(['detail', 'grid', 'compare'] as ViewMode[]).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
                   style={[
-                    styles.viewModeTabText,
-                    {
-                      color: viewMode === 'detail' ? '#3B82F6' : colors.textMuted,
-                      fontWeight: viewMode === 'detail' ? '700' : '500',
-                    },
+                    styles.viewModeTab,
+                    viewMode === mode && [
+                      styles.viewModeTabActive,
+                      { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
+                    ],
                   ]}
+                  onPress={() => setViewMode(mode)}
                 >
-                  📈 {selectedSymbol || 'Grafic Detaliat'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.viewModeTab,
-                  viewMode === 'grid' && [
-                    styles.viewModeTabActive,
-                    { backgroundColor: isBlack ? '#1E293B' : '#FFFFFF' },
-                  ],
-                ]}
-                onPress={() => setViewMode('grid')}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.viewModeTabText,
-                    {
-                      color: viewMode === 'grid' ? '#3B82F6' : colors.textMuted,
-                      fontWeight: viewMode === 'grid' ? '700' : '500',
-                    },
-                  ]}
-                >
-                  ▦ Multi-Grafic ({favorites.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.viewModeTab,
-                  viewMode === 'compare' && [
-                    styles.viewModeTabActive,
-                    { backgroundColor: isBlack ? '#1E293B' : '#FFFFFF' },
-                  ],
-                ]}
-                onPress={() => setViewMode('compare')}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.viewModeTabText,
-                    {
-                      color: viewMode === 'compare' ? '#3B82F6' : colors.textMuted,
-                      fontWeight: viewMode === 'compare' ? '700' : '500',
-                    },
-                  ]}
-                >
-                  📊 Comparație
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.viewModeTabText,
+                      {
+                        color: viewMode === mode ? colors.text : colors.textMuted,
+                        fontWeight: viewMode === mode ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {mode === 'detail' ? 'Detalii' : mode === 'grid' ? 'Bloomberg' : 'Comparativ'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             <View style={styles.rightHeaderControls}>
-              {error ? (
+              {error || listsError ? (
                 <Text style={[styles.statusHint, { color: '#EF4444' }]} numberOfLines={1}>
-                  {error}
+                  {error || listsError}
                 </Text>
               ) : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.kioskScreenBtn,
+                  {
+                    backgroundColor: isBlack ? '#1E293B' : colors.card,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => handleToggleKiosk()}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.kioskScreenBtnText, { color: colors.text }]}>
+                  {isKiosk ? '⬜ Ieșire' : '⬛ Kiosk'}
+                </Text>
+              </TouchableOpacity>
 
               <PollingDropdown
                 currentInterval={pollingInterval}
@@ -290,31 +283,6 @@ export default function WatchlistScreen({
                 onSelectInterval={setPollingInterval}
                 onManualRefresh={manualRefresh}
               />
-
-              <TouchableOpacity
-                style={[
-                  styles.kioskScreenBtn,
-                  isKiosk
-                    ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
-                    : {
-                        backgroundColor: isBlack ? '#1E293B' : colors.card,
-                        borderColor: colors.cardBorder,
-                      },
-                ]}
-                onPress={() => handleToggleKiosk(!isKiosk)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={isKiosk ? 'Ieșire din modul Kiosk' : 'Comută mod Kiosk'}
-              >
-                <Text
-                  style={[
-                    styles.kioskScreenBtnText,
-                    { color: isKiosk ? '#FFFFFF' : colors.text },
-                  ]}
-                >
-                  {isKiosk ? '✕ Ieșire Kiosk' : '⛶ Kiosk'}
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -368,13 +336,16 @@ export default function WatchlistScreen({
         </View>
       </View>
 
-      {/* Favorites Setup Modal */}
+      {/* Favorites Setup Modal — now multi-list aware */}
       <FavoritesSetupModal
         visible={setupModalVisible}
         allSymbols={allSymbols}
         currentFavorites={favorites}
-        onSaveFavorites={setFavorites}
+        onSaveFavorites={handleSaveFavorites}
         onClose={() => setSetupModalVisible(false)}
+        allLists={allLists}
+        activeListId={activeListId}
+        onSwitchList={switchList}
       />
     </View>
   );
@@ -402,20 +373,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
-  },
-  sidebarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sidebarTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  sidebarCount: {
-    fontSize: 11,
-    fontWeight: '600',
+    zIndex: 100,
   },
   sidebarActions: {
     flexDirection: 'row',
@@ -432,6 +390,15 @@ const styles = StyleSheet.create({
   },
   setupIconText: {
     fontSize: 13,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 11,
   },
   cardsContainer: {
     flex: 1,

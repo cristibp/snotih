@@ -379,4 +379,22 @@ export interface GlobalSignalsResult {
   reasoning: string[];
 }
 
+// ─── Multi-Favorite Lists (GitHub-backed) ───
+
+export interface FavoriteList {
+  id: string;
+  name: string;
+  icon?: string;
+  color?: string;
+  symbols: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FavoriteListsFile {
+  version: number;
+  defaultListId: string;
+  lists: FavoriteList[];
+}
+
 

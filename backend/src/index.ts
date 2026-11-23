@@ -48,6 +48,16 @@ import {
   startGlobalSignalsScheduler,
 } from './services/globalSignalsService';
 import { ExchangeRates, RsiCheckResponse, AlertCheckResponse, AlertsStatusResponse } from './types';
+import {
+  getAllLists,
+  getListById,
+  createList,
+  updateList,
+  deleteList,
+  addSymbolsToList,
+  removeSymbolsFromList,
+  setDefaultList,
+} from './services/githubFavoritesService';
 import { authRouter, requireAuth } from './routes/authRoutes';
 import { emailRoleStore } from './services/emailRoleStore';
 
@@ -1272,6 +1282,189 @@ app.get('/api/cron/global-signals', async (req, res) => {
   } catch (err: any) {
     console.error('Eroare in /api/cron/global-signals:', err);
     return res.status(500).json({ error: err?.message || String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Multi-Favorite Lists (GitHub-backed)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/favorites/lists
+ * Returns all favorite lists from the GitHub repo.
+ */
+app.get('/api/favorites/lists', async (_req, res) => {
+  try {
+    const data = await getAllLists();
+    return res.json(data);
+  } catch (err: any) {
+    console.error('Eroare la /api/favorites/lists:', err);
+    return res.status(500).json({
+      error: 'Eroare la preluarea listelor de favorite.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * GET /api/favorites/lists/:listId
+ * Returns a single favorite list by ID.
+ */
+app.get('/api/favorites/lists/:listId', async (req, res) => {
+  try {
+    const list = await getListById(req.params.listId);
+    if (!list) {
+      return res.status(404).json({ error: `Lista "${req.params.listId}" nu a fost gasita.` });
+    }
+    return res.json(list);
+  } catch (err: any) {
+    console.error(`Eroare la /api/favorites/lists/${req.params.listId}:`, err);
+    return res.status(500).json({
+      error: 'Eroare la preluarea listei.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * POST /api/favorites/lists
+ * Creates a new favorite list.
+ * Body: { name: string, symbols?: string[], icon?: string, color?: string }
+ */
+app.post('/api/favorites/lists', async (req, res) => {
+  try {
+    const { name, symbols, icon, color } = req.body ?? {};
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: 'Campul "name" (string) este obligatoriu.' });
+    }
+    const newList = await createList({ name, symbols, icon, color });
+    return res.status(201).json(newList);
+  } catch (err: any) {
+    console.error('Eroare la POST /api/favorites/lists:', err);
+    return res.status(500).json({
+      error: 'Eroare la crearea listei.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * PUT /api/favorites/lists/:listId
+ * Updates an existing list's metadata and/or symbols.
+ * Body: { name?: string, icon?: string, color?: string, symbols?: string[] }
+ */
+app.put('/api/favorites/lists/:listId', async (req, res) => {
+  try {
+    const { name, icon, color, symbols } = req.body ?? {};
+    const updated = await updateList(req.params.listId, { name, icon, color, symbols });
+    return res.json(updated);
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error(`Eroare la PUT /api/favorites/lists/${req.params.listId}:`, err);
+    return res.status(500).json({
+      error: 'Eroare la actualizarea listei.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * DELETE /api/favorites/lists/:listId
+ * Deletes a list by ID. Refuses to delete the default list.
+ */
+app.delete('/api/favorites/lists/:listId', async (req, res) => {
+  try {
+    await deleteList(req.params.listId);
+    return res.json({ success: true, message: `Lista "${req.params.listId}" a fost stearsa.` });
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err.message?.includes('Cannot delete')) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error(`Eroare la DELETE /api/favorites/lists/${req.params.listId}:`, err);
+    return res.status(500).json({
+      error: 'Eroare la stergerea listei.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * POST /api/favorites/lists/:listId/symbols
+ * Adds symbols to a list (deduplicating).
+ * Body: { symbols: string[] }
+ */
+app.post('/api/favorites/lists/:listId/symbols', async (req, res) => {
+  try {
+    const { symbols } = req.body ?? {};
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'Campul "symbols" (string[]) este obligatoriu si nu poate fi gol.' });
+    }
+    const updated = await addSymbolsToList(req.params.listId, symbols);
+    return res.json(updated);
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error(`Eroare la POST /api/favorites/lists/${req.params.listId}/symbols:`, err);
+    return res.status(500).json({
+      error: 'Eroare la adaugarea simbolurilor.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * DELETE /api/favorites/lists/:listId/symbols
+ * Removes symbols from a list.
+ * Body: { symbols: string[] }
+ */
+app.delete('/api/favorites/lists/:listId/symbols', async (req, res) => {
+  try {
+    const { symbols } = req.body ?? {};
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'Campul "symbols" (string[]) este obligatoriu si nu poate fi gol.' });
+    }
+    const updated = await removeSymbolsFromList(req.params.listId, symbols);
+    return res.json(updated);
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error(`Eroare la DELETE /api/favorites/lists/${req.params.listId}/symbols:`, err);
+    return res.status(500).json({
+      error: 'Eroare la stergerea simbolurilor.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
+ * PUT /api/favorites/default
+ * Sets the default list.
+ * Body: { listId: string }
+ */
+app.put('/api/favorites/default', async (req, res) => {
+  try {
+    const { listId } = req.body ?? {};
+    if (!listId || typeof listId !== 'string') {
+      return res.status(400).json({ error: 'Campul "listId" (string) este obligatoriu.' });
+    }
+    const data = await setDefaultList(listId);
+    return res.json({ success: true, defaultListId: data.defaultListId });
+  } catch (err: any) {
+    if (err.message?.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error('Eroare la PUT /api/favorites/default:', err);
+    return res.status(500).json({
+      error: 'Eroare la setarea listei implicite.',
+      message: err?.message || String(err),
+    });
   }
 });
 

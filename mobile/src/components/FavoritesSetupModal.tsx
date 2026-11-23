@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { WatchlistSymbolMeta } from '../api/types';
+import { FavoriteList, WatchlistSymbolMeta } from '../api/types';
 import { DEFAULT_FAVORITES } from '../hooks/useWatchlistPolling';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -18,6 +18,9 @@ interface FavoritesSetupModalProps {
   currentFavorites: string[];
   onSaveFavorites: (newFavorites: string[]) => void;
   onClose: () => void;
+  allLists?: FavoriteList[];
+  activeListId?: string;
+  onSwitchList?: (listId: string) => void;
 }
 
 export default function FavoritesSetupModal({
@@ -26,11 +29,19 @@ export default function FavoritesSetupModal({
   currentFavorites,
   onSaveFavorites,
   onClose,
+  allLists,
+  activeListId,
+  onSwitchList,
 }: FavoritesSetupModalProps) {
   const { colors, isBlack } = useTheme();
   const [selectedFavs, setSelectedFavs] = useState<string[]>(currentFavorites);
   const [capLimit, setCapLimit] = useState<number>(5);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const activeList = useMemo(
+    () => allLists?.find((l) => l.id === activeListId) || null,
+    [allLists, activeListId]
+  );
 
   // Sincronizare la deschidere
   React.useEffect(() => {
@@ -120,7 +131,9 @@ export default function FavoritesSetupModal({
                 Configurare Simboluri Favorite
               </Text>
               <Text style={[styles.modalSubtitle, { color: colors.textMuted }]}>
-                Selectează până la {capLimit} simboluri pentru ecranul 800×480 WVGA
+                {activeList
+                  ? `Listă: ${activeList.icon || '⭐'} ${activeList.name} • până la ${capLimit} simboluri`
+                  : `Selectează până la ${capLimit} simboluri pentru ecranul 800×480 WVGA`}
               </Text>
             </View>
 
@@ -132,6 +145,55 @@ export default function FavoritesSetupModal({
               <Text style={[styles.closeIconText, { color: colors.text }]}>✕</Text>
             </TouchableOpacity>
           </View>
+
+          {/* List switcher tabs */}
+          {allLists && allLists.length > 1 && onSwitchList && (
+            <View style={[styles.listTabsContainer, { borderBottomColor: colors.cardBorder }]}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.listTabsScroll}
+              >
+                {allLists.map((l) => {
+                  const isCurrent = l.id === activeListId;
+                  return (
+                    <TouchableOpacity
+                      key={l.id}
+                      style={[
+                        styles.listTabChip,
+                        {
+                          backgroundColor: isCurrent
+                            ? isBlack
+                              ? '#1E293B'
+                              : '#E2E8F0'
+                            : 'transparent',
+                          borderColor: isCurrent ? (l.color || '#3B82F6') : colors.cardBorder,
+                        },
+                      ]}
+                      onPress={() => onSwitchList(l.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.listTabIcon}>{l.icon || '⭐'}</Text>
+                      <Text
+                        style={[
+                          styles.listTabName,
+                          {
+                            color: isCurrent ? colors.text : colors.textMuted,
+                            fontWeight: isCurrent ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {l.name}
+                      </Text>
+                      <Text style={[styles.listTabCount, { color: colors.textMuted }]}>
+                        ({l.symbols.length})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Stepper limita si Badge numar selectate */}
           <View style={styles.controlsBar}>
@@ -565,5 +627,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  listTabsContainer: {
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+  },
+  listTabsScroll: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  listTabChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  listTabIcon: {
+    fontSize: 12,
+  },
+  listTabName: {
+    fontSize: 11,
+  },
+  listTabCount: {
+    fontSize: 10,
   },
 });

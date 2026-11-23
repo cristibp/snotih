@@ -15,6 +15,8 @@ import {
   MarketQuote,
   WatchlistQuotesResponse,
   WatchlistHistoryResponse,
+  FavoriteList,
+  FavoriteListsFile,
 } from './types';
 
 // Inlocuieste cu URL-ul real oferit de Render dupa deployment.
@@ -317,5 +319,123 @@ export async function triggerGlobalSignalsDiscordAlert(webhookUrl?: string): Pro
   return await response.json();
 }
 
+// ─── Multi-Favorite Lists (GitHub-backed) ───
 
+/**
+ * Preia toate listele de favorite.
+ */
+export async function fetchFavoriteLists(): Promise<FavoriteListsFile> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists`);
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea listelor de favorite (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteListsFile;
+}
+
+/**
+ * Preia o singura lista de favorite dupa ID.
+ */
+export async function fetchFavoriteList(listId: string): Promise<FavoriteList> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists/${encodeURIComponent(listId)}`);
+  if (!response.ok) {
+    throw new Error(`Eroare la preluarea listei "${listId}" (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteList;
+}
+
+/**
+ * Creeaza o lista noua de favorite.
+ */
+export async function createFavoriteList(params: {
+  name: string;
+  symbols?: string[];
+  icon?: string;
+  color?: string;
+}): Promise<FavoriteList> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    throw new Error(`Eroare la crearea listei (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteList;
+}
+
+/**
+ * Actualizeaza o lista existenta (metadata si/sau simboluri).
+ */
+export async function updateFavoriteList(
+  listId: string,
+  patch: Partial<Pick<FavoriteList, 'name' | 'icon' | 'color' | 'symbols'>>
+): Promise<FavoriteList> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists/${encodeURIComponent(listId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw new Error(`Eroare la actualizarea listei "${listId}" (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteList;
+}
+
+/**
+ * Sterge o lista de favorite.
+ */
+export async function deleteFavoriteList(listId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists/${encodeURIComponent(listId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error((body as any)?.error || `Eroare la stergerea listei (status ${response.status})`);
+  }
+}
+
+/**
+ * Adauga simboluri la o lista (fara duplicate).
+ */
+export async function addSymbolsToFavoriteList(listId: string, symbols: string[]): Promise<FavoriteList> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists/${encodeURIComponent(listId)}/symbols`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols }),
+  });
+  if (!response.ok) {
+    throw new Error(`Eroare la adaugarea simbolurilor (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteList;
+}
+
+/**
+ * Sterge simboluri dintr-o lista.
+ */
+export async function removeSymbolsFromFavoriteList(listId: string, symbols: string[]): Promise<FavoriteList> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists/${encodeURIComponent(listId)}/symbols`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbols }),
+  });
+  if (!response.ok) {
+    throw new Error(`Eroare la stergerea simbolurilor (status ${response.status})`);
+  }
+  return (await response.json()) as FavoriteList;
+}
+
+/**
+ * Seteaza lista implicita.
+ */
+export async function setDefaultFavoriteList(listId: string): Promise<{ success: boolean; defaultListId: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/favorites/default`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ listId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Eroare la setarea listei implicite (status ${response.status})`);
+  }
+  return await response.json();
+}
 

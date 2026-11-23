@@ -16,9 +16,16 @@ export const POLLING_INTERVAL_OPTIONS = [
   { label: '300s (5m)', value: 300 },
 ];
 
-export function useWatchlistPolling(isActive: boolean = true) {
+/**
+ * Hook for watchlist polling. Accepts an external `favorites` list (from useFavoriteLists)
+ * or falls back to its own AsyncStorage-managed favorites for backward compatibility.
+ */
+export function useWatchlistPolling(
+  isActive: boolean = true,
+  externalFavorites?: string[]
+) {
   const [pollingInterval, setPollingIntervalState] = useState<number>(DEFAULT_POLLING_SECONDS);
-  const [favorites, setFavoritesState] = useState<string[]>(DEFAULT_FAVORITES);
+  const [internalFavorites, setInternalFavoritesState] = useState<string[]>(DEFAULT_FAVORITES);
   const [allSymbols, setAllSymbols] = useState<WatchlistSymbolMeta[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_FAVORITES[0]);
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({});
@@ -34,6 +41,10 @@ export function useWatchlistPolling(isActive: boolean = true) {
   const lastFetchedTimestampRef = useRef<number>(Date.now());
   const prevIsActiveRef = useRef<boolean>(isActive);
 
+  // Determine which favorites to use: external (from useFavoriteLists) or internal (AsyncStorage)
+  const useExternal = externalFavorites !== undefined && externalFavorites.length > 0;
+  const favorites = useExternal ? externalFavorites : internalFavorites;
+
   // 1. Incarcare configuratii salvate din storage la mount
   useEffect(() => {
     let isMounted = true;
@@ -41,7 +52,7 @@ export function useWatchlistPolling(isActive: boolean = true) {
       try {
         const [savedCadence, savedFavs, catalog] = await Promise.all([
           AsyncStorage.getItem(POLLING_STORAGE_KEY),
-          AsyncStorage.getItem(FAVORITES_STORAGE_KEY),
+          useExternal ? Promise.resolve(null) : AsyncStorage.getItem(FAVORITES_STORAGE_KEY),
           fetchWatchlistSymbols().catch(() => []),
         ]);
 
@@ -58,11 +69,11 @@ export function useWatchlistPolling(isActive: boolean = true) {
             }
           }
 
-          if (savedFavs) {
+          if (!useExternal && savedFavs) {
             try {
               const parsedFavs = JSON.parse(savedFavs);
               if (Array.isArray(parsedFavs) && parsedFavs.length > 0) {
-                setFavoritesState(parsedFavs);
+                setInternalFavoritesState(parsedFavs);
                 setSelectedSymbol(parsedFavs[0]);
               }
             } catch (e) {
@@ -78,7 +89,16 @@ export function useWatchlistPolling(isActive: boolean = true) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [useExternal]);
+
+  // Update selectedSymbol when external favorites change
+  useEffect(() => {
+    if (useExternal && externalFavorites.length > 0) {
+      if (!externalFavorites.includes(selectedSymbol)) {
+        setSelectedSymbol(externalFavorites[0]);
+      }
+    }
+  }, [externalFavorites, useExternal, selectedSymbol]);
 
   // 2. Fetch cotatii pentru lista de favorite
   const fetchQuotes = useCallback(async (favList: string[]) => {
@@ -107,10 +127,15 @@ export function useWatchlistPolling(isActive: boolean = true) {
     );
   }, []);
 
-  // 4. Modificare lista de favorite cu salvare
+  // 4. Modificare lista de favorite cu salvare (only for internal mode)
   const setFavorites = useCallback(
     (newFavs: string[]) => {
-      setFavoritesState(newFavs);
+      if (useExternal) {
+        // In external mode, this is a no-op — favorites are managed by useFavoriteLists
+        console.warn('[useWatchlistPolling] setFavorites called in external mode — ignored.');
+        return;
+      }
+      setInternalFavoritesState(newFavs);
       AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(newFavs)).catch((e) =>
         console.warn('Failed to save favorites:', e)
       );
@@ -120,7 +145,7 @@ export function useWatchlistPolling(isActive: boolean = true) {
       // Re-fetch imediat pentru noile simboluri
       fetchQuotes(newFavs);
     },
-    [fetchQuotes, selectedSymbol]
+    [fetchQuotes, selectedSymbol, useExternal]
   );
 
   // 5. Refresh manual
