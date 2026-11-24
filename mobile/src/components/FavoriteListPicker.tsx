@@ -122,110 +122,139 @@ export default function FavoriteListPicker({
         {isSaving && <ActivityIndicator size="small" color={colors.textMuted} style={styles.savingIndicator} />}
       </TouchableOpacity>
 
-      {/* Dropdown */}
-      {isDropdownOpen && (
-        <View
-          style={[
-            styles.dropdown,
-            {
-              backgroundColor: isBlack ? '#0F172A' : '#FFFFFF',
-              borderColor: colors.cardBorder,
-            },
-          ]}
+      {/* Dropdown Modal */}
+      <Modal
+        visible={isDropdownOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDropdownOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsDropdownOpen(false)}
         >
-          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-            {allLists.map((list) => (
-              <TouchableOpacity
-                key={list.id}
-                style={[
-                  styles.dropdownItem,
-                  list.id === activeListId && {
-                    backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
-                  },
-                  { borderBottomColor: colors.cardBorder },
-                ]}
-                onPress={() => {
-                  onSwitchList(list.id);
-                  setIsDropdownOpen(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.dropdownItemLeft}>
-                  <Text style={styles.dropdownItemIcon}>{list.icon || '📋'}</Text>
-                  <View>
-                    <View style={styles.dropdownItemNameRow}>
-                      <Text style={[styles.dropdownItemName, { color: colors.text }]} numberOfLines={1}>
-                        {list.name}
-                      </Text>
-                      {list.id === defaultListId && (
-                        <View style={styles.defaultBadge}>
-                          <Text style={styles.defaultBadgeText}>default</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.dropdownItemCount, { color: colors.textMuted }]}>
-                      {list.symbols.length} simboluri
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.dropdownItemActions}>
-                  {list.id !== defaultListId && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        onSetDefault(list.id);
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                    >
-                      <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>📌</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      openEditModal(list);
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                  >
-                    <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>✏️</Text>
-                  </TouchableOpacity>
-                  {allLists.length > 1 && list.id !== defaultListId && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDeleteList(list.id);
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                    >
-                      <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>🗑️</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Create new list button */}
           <TouchableOpacity
-            style={[styles.createBtn, { borderTopColor: colors.cardBorder }]}
-            onPress={() => {
-              setIsDropdownOpen(false);
-              setNewListName('');
-              setNewListIcon('⭐');
-              setNewListColor('#3B82F6');
-              setIsCreateModalOpen(true);
-            }}
-            activeOpacity={0.7}
+            activeOpacity={1}
+            style={[
+              styles.dropdownModalContent,
+              {
+                backgroundColor: isBlack ? '#0F172A' : '#FFFFFF',
+                borderColor: colors.cardBorder,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.createBtnIcon}>➕</Text>
-            <Text style={[styles.createBtnText, { color: '#3B82F6' }]}>Creează listă nouă</Text>
+            <View style={[styles.dropdownHeader, { borderBottomColor: colors.cardBorder }]}>
+              <Text style={[styles.dropdownHeaderTitle, { color: colors.text }]}>
+                Alege Watchlist ({allLists.length})
+              </Text>
+              <TouchableOpacity
+                style={styles.dropdownCloseBtn}
+                onPress={() => setIsDropdownOpen(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.dropdownCloseText, { color: colors.textMuted }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {allLists.map((list) => (
+                <TouchableOpacity
+                  key={list.id}
+                  style={[
+                    styles.dropdownItem,
+                    list.id === activeListId && {
+                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                    },
+                    { borderBottomColor: colors.cardBorder },
+                  ]}
+                  onPress={() => {
+                    onSwitchList(list.id);
+                    setIsDropdownOpen(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.dropdownItemLeft}>
+                    <Text style={styles.dropdownItemIcon}>{list.icon || '📋'}</Text>
+                    <View>
+                      <View style={styles.dropdownItemNameRow}>
+                        <Text style={[styles.dropdownItemName, { color: colors.text }]} numberOfLines={1}>
+                          {list.name}
+                        </Text>
+                        {list.id === defaultListId && (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>default</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.dropdownItemCount, { color: colors.textMuted }]}>
+                        {list.symbols.length} simboluri
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.dropdownItemActions}>
+                    {list.id !== defaultListId && (
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          onSetDefault(list.id);
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        accessibilityLabel="Setează ca implicit"
+                      >
+                        <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>📌</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openEditModal(list);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                      accessibilityLabel="Editează watchlist"
+                    >
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>✏️</Text>
+                    </TouchableOpacity>
+                    {allLists.length > 1 && list.id !== defaultListId && (
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDeleteList(list.id);
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        accessibilityLabel="Șterge watchlist"
+                      >
+                        <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>🗑️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Create new list button */}
+            <TouchableOpacity
+              style={[styles.createBtn, { borderTopColor: colors.cardBorder }]}
+              onPress={() => {
+                setIsDropdownOpen(false);
+                setNewListName('');
+                setNewListIcon('⭐');
+                setNewListColor('#3B82F6');
+                setIsCreateModalOpen(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.createBtnIcon}>➕</Text>
+              <Text style={[styles.createBtnText, { color: '#3B82F6' }]}>Creează listă nouă</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </View>
-      )}
+        </TouchableOpacity>
+      </Modal>
 
       {/* Create List Modal */}
       <Modal visible={isCreateModalOpen} transparent animationType="fade" onRequestClose={() => setIsCreateModalOpen(false)}>
@@ -406,23 +435,39 @@ const styles = StyleSheet.create({
   savingIndicator: {
     marginLeft: 4,
   },
-  dropdown: {
-    position: 'absolute',
-    top: 32,
-    left: 0,
-    right: 0,
-    minWidth: 230,
-    borderRadius: 10,
+  dropdownModalContent: {
+    width: '90%',
+    maxWidth: 340,
+    borderRadius: 14,
     borderWidth: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-    maxHeight: 280,
-    zIndex: 200,
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 10,
+    maxHeight: 400,
+    overflow: 'hidden',
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dropdownCloseBtn: {
+    padding: 4,
+  },
+  dropdownCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   dropdownScroll: {
-    maxHeight: 220,
+    maxHeight: 280,
   },
   dropdownItem: {
     flexDirection: 'row',

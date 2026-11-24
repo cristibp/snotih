@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -59,6 +60,7 @@ function getInitialTab(): TabType {
 function MainApp() {
   const [activeTab, setActiveTabState] = useState<TabType>(getInitialTab);
   const [isKioskMode, setIsKioskMode] = useState<boolean>(false);
+  const [navModalOpen, setNavModalOpen] = useState<boolean>(false);
   const { isBlack, colors, toggleTheme } = useTheme();
   const { user, loading: authLoading, logout } = useAuth();
   const {
@@ -69,6 +71,7 @@ function MainApp() {
     profileShortLabel,
     profileLabel,
     cycleDeviceProfile,
+    width,
   } = useDevice();
 
   // Ascultare evenimente browser fullscreen si tasta Escape pe Web
@@ -148,8 +151,8 @@ function MainApp() {
     });
   };
 
-  // Pe telefon mobil în mod portrait utilizăm bottom navigation bar
-  const isMobilePortrait = isPhone && !isLandscape;
+  // Pe telefon mobil în mod portrait sau ecran compact utilizăm bottom navigation bar
+  const isMobilePortrait = (isPhone && !isLandscape) || (width < 680 && !isAllview);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -179,11 +182,17 @@ function MainApp() {
               <View style={[styles.mobileHeader, { backgroundColor: colors.nav, borderBottomColor: colors.navBorder }]}>
                 <View style={styles.mobileHeaderLeft}>
                   <Text style={[styles.mobileAppBrand, { color: colors.text }]}>SNOTI</Text>
-                  <View style={[styles.mobileActiveBadge, { backgroundColor: colors.segmentActive }]}>
+                  <TouchableOpacity
+                    style={[styles.mobileActiveBadge, { backgroundColor: colors.segmentActive }]}
+                    onPress={() => setNavModalOpen(true)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Deschide meniul de secțiuni"
+                  >
                     <Text style={[styles.mobileActiveBadgeText, { color: colors.text }]}>
-                      {TABS.find((t) => t.id === activeTab)?.label || (activeTab === 'settings' ? 'Admin' : '')}
+                      {TABS.find((t) => t.id === activeTab)?.icon} {TABS.find((t) => t.id === activeTab)?.label || (activeTab === 'settings' ? 'Admin' : '')} ▾
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.mobileHeaderRight}>
@@ -403,6 +412,124 @@ function MainApp() {
               })}
             </View>
           )}
+
+          {/* ── FLOATING EXIT KIOSK BUTTON (Always visible in Kiosk Mode) ── */}
+          {isKioskMode && (
+            <TouchableOpacity
+              style={styles.floatingExitKiosk}
+              onPress={() => handleToggleKiosk(false)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Ieșire din mod Kiosk"
+            >
+              <Text style={styles.floatingExitKioskText}>✕ Ieșire Kiosk</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── MOBILE QUICK SECTION NAVIGATION MODAL ── */}
+          <Modal
+            visible={navModalOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setNavModalOpen(false)}
+          >
+            <TouchableOpacity
+              style={styles.navModalOverlay}
+              activeOpacity={1}
+              onPress={() => setNavModalOpen(false)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={[
+                  styles.navModalContent,
+                  {
+                    backgroundColor: isBlack ? '#0F172A' : '#FFFFFF',
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <View style={[styles.navModalHeader, { borderBottomColor: colors.cardBorder }]}>
+                  <Text style={[styles.navModalTitle, { color: colors.text }]}>Secțiuni Aplicație</Text>
+                  <TouchableOpacity
+                    style={styles.navModalCloseBtn}
+                    onPress={() => setNavModalOpen(false)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={[styles.navModalCloseText, { color: colors.textMuted }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.navModalItems}>
+                  {TABS.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.navModalItem,
+                          isActive && [
+                            styles.navModalItemActive,
+                            { backgroundColor: isBlack ? '#1E293B' : '#EFF6FF' },
+                          ],
+                          { borderColor: isActive ? '#3B82F6' : colors.cardBorder },
+                        ]}
+                        onPress={() => {
+                          handleTabPress(tab.id);
+                          setNavModalOpen(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.navModalItemIcon}>{tab.icon}</Text>
+                        <View style={styles.navModalItemTextCol}>
+                          <Text
+                            style={[
+                              styles.navModalItemLabel,
+                              { color: isActive ? '#3B82F6' : colors.text },
+                            ]}
+                          >
+                            {tab.label}
+                          </Text>
+                        </View>
+                        {isActive && <Text style={styles.navModalCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {user.role === 'admin' && (
+                    <TouchableOpacity
+                      style={[
+                        styles.navModalItem,
+                        activeTab === 'settings' && [
+                          styles.navModalItemActive,
+                          { backgroundColor: isBlack ? '#1E293B' : '#EFF6FF' },
+                        ],
+                        { borderColor: activeTab === 'settings' ? '#3B82F6' : colors.cardBorder },
+                      ]}
+                      onPress={() => {
+                        handleTabPress('settings');
+                        setNavModalOpen(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.navModalItemIcon}>⚙️</Text>
+                      <View style={styles.navModalItemTextCol}>
+                        <Text
+                          style={[
+                            styles.navModalItemLabel,
+                            { color: activeTab === 'settings' ? '#3B82F6' : colors.text },
+                          ]}
+                        >
+                          Panou Admin & Sesiuni
+                        </Text>
+                      </View>
+                      {activeTab === 'settings' && <Text style={styles.navModalCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
         </>
       )}
     </SafeAreaView>
@@ -523,9 +650,11 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+    overflow: 'hidden',
   },
   tabContentPane: {
     flex: 1,
+    overflow: 'hidden',
   },
   // Mobile Portrait Bottom Navigation Bar
   bottomTabBar: {
@@ -536,6 +665,8 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 6,
     borderTopWidth: 1,
+    zIndex: 999,
+    elevation: 8,
   },
   bottomTabButton: {
     flex: 1,
@@ -561,5 +692,95 @@ const styles = StyleSheet.create({
   },
   bottomTabTextActive: {
     fontWeight: '800',
+  },
+  // Floating Exit Kiosk Button
+  floatingExitKiosk: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 10,
+    zIndex: 9999,
+  },
+  floatingExitKioskText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  // Quick Section Navigation Modal
+  navModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  navModalContent: {
+    width: '90%',
+    maxWidth: 340,
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  navModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  navModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  navModalCloseBtn: {
+    padding: 4,
+  },
+  navModalCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  navModalItems: {
+    padding: 10,
+    gap: 6,
+  },
+  navModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 10,
+  },
+  navModalItemActive: {
+    borderWidth: 1.5,
+  },
+  navModalItemIcon: {
+    fontSize: 20,
+  },
+  navModalItemTextCol: {
+    flex: 1,
+  },
+  navModalItemLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  navModalCheck: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#3B82F6',
   },
 });

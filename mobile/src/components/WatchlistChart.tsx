@@ -797,37 +797,77 @@ export default function WatchlistChart({
 
       {/* Footer Metrics Row: Day High, Day Low, Volume */}
       <View style={[styles.footerRow, { borderTopColor: colors.cardBorder }]}>
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Minim Zi</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
+        <View
+          style={[
+            styles.metricItem,
+            {
+              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+              borderColor: isBlack ? '#334155' : '#E2E8F0',
+            },
+          ]}
+        >
+          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Minim Zi</Text>
+          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
             {quote?.low ? quote.low.toFixed(2) : minVal.toFixed(2)}
           </Text>
         </View>
 
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Maxim Zi</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
+        <View
+          style={[
+            styles.metricItem,
+            {
+              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+              borderColor: isBlack ? '#334155' : '#E2E8F0',
+            },
+          ]}
+        >
+          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Maxim Zi</Text>
+          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
             {quote?.high ? quote.high.toFixed(2) : maxVal.toFixed(2)}
           </Text>
         </View>
 
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Deschidere</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
+        <View
+          style={[
+            styles.metricItem,
+            {
+              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+              borderColor: isBlack ? '#334155' : '#E2E8F0',
+            },
+          ]}
+        >
+          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Deschidere</Text>
+          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
             {quote?.open ? quote.open.toFixed(2) : '-'}
           </Text>
         </View>
 
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Închidere Prec.</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
+        <View
+          style={[
+            styles.metricItem,
+            {
+              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+              borderColor: isBlack ? '#334155' : '#E2E8F0',
+            },
+          ]}
+        >
+          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Închidere Prec.</Text>
+          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
             {quote?.previousClose ? quote.previousClose.toFixed(2) : '-'}
           </Text>
         </View>
 
-        <View style={styles.metricItem}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Volum Zi</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
+        <View
+          style={[
+            styles.metricItem,
+            {
+              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+              borderColor: isBlack ? '#334155' : '#E2E8F0',
+            },
+          ]}
+        >
+          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Volum Zi</Text>
+          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
             {quote?.price && candles.length > 0
               ? candles[candles.length - 1].volume > 1000000
                 ? `${(candles[candles.length - 1].volume / 1000000).toFixed(1)}M`
@@ -1045,19 +1085,28 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderTopWidth: 1,
     paddingTop: 8,
-    marginTop: 2,
+    marginTop: 4,
     gap: 4,
   },
   metricItem: {
     alignItems: 'center',
-    minWidth: 52,
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 54,
+    paddingVertical: 5,
+    paddingHorizontal: 3,
+    borderRadius: 7,
+    borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 9,
+    fontWeight: '700',
     marginBottom: 2,
+    textAlign: 'center',
   },
   metricValue: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
   },
 });

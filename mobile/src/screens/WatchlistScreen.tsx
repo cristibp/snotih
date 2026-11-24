@@ -145,6 +145,30 @@ export default function WatchlistScreen({
           <View style={styles.mobileRightActions}>
             <TouchableOpacity
               style={[
+                styles.kioskScreenBtn,
+                isKiosk && { backgroundColor: '#EF4444', borderColor: '#EF4444' },
+                !isKiosk && {
+                  backgroundColor: isBlack ? '#1E293B' : colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              onPress={() => handleToggleKiosk()}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isKiosk ? 'Ieșire din Kiosk' : 'Ecran complet Kiosk'}
+            >
+              <Text
+                style={[
+                  styles.kioskScreenBtnText,
+                  { color: isKiosk ? '#FFFFFF' : colors.text },
+                ]}
+              >
+                {isKiosk ? '✕ Ieșire' : '⛶ Kiosk'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
                 styles.setupIconBtn,
                 {
                   backgroundColor: isBlack ? '#1E293B' : colors.card,
@@ -307,7 +331,7 @@ export default function WatchlistScreen({
                 setViewMode('detail');
                 setMobileSubMode('chart');
               }}
-              isKiosk={false}
+              isKiosk={isKiosk}
               onToggleKiosk={handleToggleKiosk}
             />
           ) : viewMode === 'grid' ? (
@@ -320,8 +344,11 @@ export default function WatchlistScreen({
                 setMobileSubMode('chart');
               }}
               isSidebarCollapsed={true}
-              onToggleSidebar={() => {}}
-              isKiosk={false}
+              onToggleSidebar={() => {
+                setViewMode('detail');
+                setMobileSubMode('cards');
+              }}
+              isKiosk={isKiosk}
               onToggleKiosk={handleToggleKiosk}
               countdown={countdown}
               isRefreshing={isRefreshing}
@@ -370,7 +397,7 @@ export default function WatchlistScreen({
             <WatchlistChart
               symbol={selectedSymbol}
               quote={quotes[selectedSymbol]}
-              isKiosk={false}
+              isKiosk={isKiosk}
               onToggleKiosk={handleToggleKiosk}
               favorites={favorites}
               onSelectSymbol={setSelectedSymbol}
@@ -386,6 +413,18 @@ export default function WatchlistScreen({
             </View>
           )}
         </View>
+
+        {/* Floating exit kiosk button when in kiosk mode on mobile */}
+        {isKiosk && (
+          <TouchableOpacity
+            style={styles.floatingKioskExitBtn}
+            onPress={() => handleToggleKiosk(false)}
+            activeOpacity={0.8}
+            accessibilityLabel="Ieșire din ecran complet Kiosk"
+          >
+            <Text style={styles.floatingKioskExitText}>✕ Ieșire Kiosk</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Setup Modal */}
         <FavoritesSetupModal
@@ -927,5 +966,25 @@ const styles = StyleSheet.create({
   },
   mobileCardsContent: {
     paddingBottom: 16,
+  },
+  floatingKioskExitBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+    zIndex: 9999,
+  },
+  floatingKioskExitText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });
