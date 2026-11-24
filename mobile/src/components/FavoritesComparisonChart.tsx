@@ -125,11 +125,14 @@ export default function FavoritesComparisonChart({
     return longest;
   }, [histories]);
 
+  const isCompactWidth = containerWidth < 460;
   // Calcule geometrice
   const chartHeight = isKiosk
     ? Math.max(250, Math.min(containerHeight - 120, 520))
+    : containerHeight > 340
+    ? Math.max(200, Math.min(containerHeight - (isCompactWidth ? 130 : 100), 450))
     : 210;
-  const paddingLeft = 48;
+  const paddingLeft = isCompactWidth ? 36 : 48;
   const paddingRight = isKiosk ? 36 : 14;
   const paddingTop = 14;
   const paddingBottom = 24;
@@ -627,6 +630,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 4,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   titleColumn: {
     flex: 1,

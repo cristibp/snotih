@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { G, Circle, Rect, Text as TextSVG, Line } from 'react-native-svg';
 import { HistoryEntry } from '../api/types';
@@ -15,7 +15,6 @@ interface RateChartProps {
   setActiveIndex: (index: number | null) => void;
 }
 
-const screenWidth = Dimensions.get('window').width;
 const MAX_X_LABELS = 6;
 
 function getYCoordinate(v: number, values: number[], height: number = 220, paddingTop: number = 16): number {
@@ -56,6 +55,8 @@ export default function RateChart({
   setActiveIndex,
 }: RateChartProps) {
   const { colors, isBlack } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const chartWidth = Math.max(260, windowWidth - 40);
   const activeCoordsRef = React.useRef<{ x: number; y: number } | null>(null);
 
   if (history.length === 0) {
@@ -85,7 +86,7 @@ export default function RateChart({
           labels,
           datasets: [{ data: values }],
         }}
-        width={screenWidth - 40}
+        width={chartWidth}
         height={220}
         yAxisLabel=""
         yAxisSuffix=""
@@ -94,7 +95,6 @@ export default function RateChart({
             activeCoordsRef.current = { x, y };
           }
 
-          const chartWidth = screenWidth - 40;
           const colWidth = values.length > 1 ? Math.max(8, chartWidth / values.length) : 40;
 
           return (
@@ -163,7 +163,7 @@ export default function RateChart({
           const medY = getYCoordinate(median, values, 220, 16);
 
           const xStart = 64; // default paddingRight
-          const xEnd = screenWidth - 40;
+          const xEnd = chartWidth;
 
           let tooltipComponent = null;
           if (activeIndex !== null && activeCoordsRef.current && activeIndex < history.length) {

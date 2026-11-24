@@ -17,6 +17,7 @@ import WatchlistChart from '../components/WatchlistChart';
 import { useFavoriteLists } from '../hooks/useFavoriteLists';
 import { useWatchlistPolling } from '../hooks/useWatchlistPolling';
 import { useTheme } from '../theme/ThemeContext';
+import { useDevice } from '../context/DeviceContext';
 import { exitWebFullscreen, requestWebFullscreen } from '../services/fullscreen';
 
 interface WatchlistScreenProps {
@@ -26,6 +27,7 @@ interface WatchlistScreenProps {
 }
 
 type ViewMode = 'detail' | 'grid' | 'compare';
+type MobileSubMode = 'chart' | 'cards';
 
 export default function WatchlistScreen({
   isActive = true,
@@ -33,12 +35,17 @@ export default function WatchlistScreen({
   onToggleKiosk: externalToggleKiosk,
 }: WatchlistScreenProps) {
   const { colors, isBlack } = useTheme();
+  const { isPhone, isLandscape, isAllview, width } = useDevice();
   const [setupModalVisible, setSetupModalVisible] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>('detail');
+  const [mobileSubMode, setMobileSubMode] = useState<MobileSubMode>('chart');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [internalKioskMode, setInternalKioskMode] = useState<boolean>(false);
 
   const isKiosk = externalKioskMode !== undefined ? externalKioskMode : internalKioskMode;
+
+  // Modul compact de telefon (portrait sau lățime mică sub 680px)
+  const isMobileView = (isPhone && !isLandscape) || (width < 680 && !isAllview);
 
   const handleToggleKiosk = (enable?: boolean) => {
     const next = enable !== undefined ? enable : !isKiosk;
@@ -93,15 +100,317 @@ export default function WatchlistScreen({
     setListSymbols(newFavs);
   };
 
+  const handleSelectFavoriteCard = (sym: string) => {
+    setSelectedSymbol(sym);
+    if (isMobileView && mobileSubMode === 'cards') {
+      setMobileSubMode('chart');
+    }
+  };
+
+  // ─── RENDER MOBILE PORTRAIT LAYOUT ───
+  if (isMobileView) {
+    return (
+      <View style={[styles.containerMobile, { backgroundColor: colors.background }]}>
+        {/* Top Control Bar for Mobile */}
+        <View style={styles.mobileControlBar}>
+          <View style={styles.mobileViewTabs}>
+            {(['detail', 'grid', 'compare'] as ViewMode[]).map((mode) => {
+              const active = viewMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[
+                    styles.mobileViewTab,
+                    active && [styles.viewModeTabActive, { backgroundColor: isBlack ? '#334155' : '#FFFFFF' }],
+                  ]}
+                  onPress={() => setViewMode(mode)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.mobileViewTabText,
+                      {
+                        color: active ? colors.text : colors.textMuted,
+                        fontWeight: active ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {mode === 'detail' ? 'Detalii' : mode === 'grid' ? 'Bloomberg' : 'Comparativ'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.mobileRightActions}>
+            <TouchableOpacity
+              style={[
+                styles.setupIconBtn,
+                {
+                  backgroundColor: isBlack ? '#1E293B' : colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              onPress={() => setSetupModalVisible(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Configurare simboluri favorite"
+            >
+              <Text style={styles.setupIconText}>⚙️</Text>
+            </TouchableOpacity>
+
+            <PollingDropdown
+              currentInterval={pollingInterval}
+              countdown={countdown}
+              isRefreshing={isRefreshing}
+              onSelectInterval={setPollingInterval}
+              onManualRefresh={manualRefresh}
+            />
+          </View>
+        </View>
+
+        {/* In Detail Mode on Mobile: Horizontal Ticker / Chip Carousel & Submode Toggle */}
+        {viewMode === 'detail' && (
+          <View style={styles.mobileTickerSection}>
+            <View style={styles.mobileTickerHeader}>
+              <View style={styles.mobileListPickerWrap}>
+                <FavoriteListPicker
+                  allLists={allLists}
+                  activeListId={activeListId}
+                  defaultListId={defaultListId}
+                  isSaving={listsSaving}
+                  onSwitchList={switchList}
+                  onCreateList={createList}
+                  onDeleteList={deleteListById}
+                  onUpdateList={updateListMeta}
+                  onSetDefault={setDefault}
+                />
+              </View>
+
+              <View style={styles.mobileSubmodeToggle}>
+                <TouchableOpacity
+                  style={[
+                    styles.submodeBtn,
+                    mobileSubMode === 'chart' && [styles.submodeBtnActive, { backgroundColor: isBlack ? '#3B82F6' : '#2563EB' }],
+                  ]}
+                  onPress={() => setMobileSubMode('chart')}
+                >
+                  <Text
+                    style={[
+                      styles.submodeText,
+                      { color: mobileSubMode === 'chart' ? '#FFFFFF' : colors.textMuted },
+                    ]}
+                  >
+                    📈 Grafic
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.submodeBtn,
+                    mobileSubMode === 'cards' && [styles.submodeBtnActive, { backgroundColor: isBlack ? '#3B82F6' : '#2563EB' }],
+                  ]}
+                  onPress={() => setMobileSubMode('cards')}
+                >
+                  <Text
+                    style={[
+                      styles.submodeText,
+                      { color: mobileSubMode === 'cards' ? '#FFFFFF' : colors.textMuted },
+                    ]}
+                  >
+                    📋 Listă ({favorites.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Horizontal Ticker Chips when in chart submode */}
+            {mobileSubMode === 'chart' && favorites.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mobileTickerScroll}
+              >
+                {favorites.map((sym) => {
+                  const q = quotes[sym];
+                  const isSelected = sym === selectedSymbol;
+                  const price = q?.price;
+                  const changePct = q?.changePercent;
+                  const isPos = (changePct ?? 0) >= 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={sym}
+                      style={[
+                        styles.mobileTickerChip,
+                        {
+                          backgroundColor: isSelected
+                            ? isBlack ? '#1E293B' : '#EFF6FF'
+                            : isBlack ? '#0F172A' : colors.card,
+                          borderColor: isSelected
+                            ? '#3B82F6'
+                            : colors.cardBorder,
+                          borderWidth: isSelected ? 1.5 : 1,
+                        },
+                      ]}
+                      onPress={() => setSelectedSymbol(sym)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.chipTopRow}>
+                        <Text
+                          style={[
+                            styles.chipSymbol,
+                            { color: isSelected ? '#3B82F6' : colors.text },
+                          ]}
+                        >
+                          {sym}
+                        </Text>
+                        {changePct !== undefined && (
+                          <Text
+                            style={[
+                              styles.chipChange,
+                              { color: isPos ? '#10B981' : '#EF4444' },
+                            ]}
+                          >
+                            {isPos ? '+' : ''}{changePct.toFixed(1)}%
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={[styles.chipPrice, { color: colors.text }]}>
+                        {price !== undefined ? `${price.toFixed(2)}` : '...'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                <TouchableOpacity
+                  style={[
+                    styles.mobileAddChip,
+                    { borderColor: colors.cardBorder, backgroundColor: isBlack ? '#0F172A' : colors.card },
+                  ]}
+                  onPress={() => setSetupModalVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.mobileAddChipText, { color: colors.textMuted }]}>+ Simbol</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* Mobile Main Body */}
+        <View style={styles.mobileBody}>
+          {viewMode === 'compare' ? (
+            <FavoritesComparisonChart
+              favorites={favorites}
+              quotes={quotes}
+              onSelectSymbol={(sym) => {
+                setSelectedSymbol(sym);
+                setViewMode('detail');
+                setMobileSubMode('chart');
+              }}
+              isKiosk={false}
+              onToggleKiosk={handleToggleKiosk}
+            />
+          ) : viewMode === 'grid' ? (
+            <FavoritesBloombergGrid
+              favorites={favorites}
+              quotes={quotes}
+              onSelectSymbol={(sym) => {
+                setSelectedSymbol(sym);
+                setViewMode('detail');
+                setMobileSubMode('chart');
+              }}
+              isSidebarCollapsed={true}
+              onToggleSidebar={() => {}}
+              isKiosk={false}
+              onToggleKiosk={handleToggleKiosk}
+              countdown={countdown}
+              isRefreshing={isRefreshing}
+              onManualRefresh={manualRefresh}
+            />
+          ) : mobileSubMode === 'cards' ? (
+            // Full width vertical card list on mobile
+            <ScrollView
+              style={styles.mobileCardsList}
+              contentContainerStyle={styles.mobileCardsContent}
+              showsVerticalScrollIndicator={true}
+            >
+              {listsLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.textMuted} />
+                  <Text style={[styles.loadingText, { color: colors.textMuted }]}>Se încarcă listele...</Text>
+                </View>
+              ) : favorites.length === 0 ? (
+                <View style={styles.emptyChartState}>
+                  <Text style={[styles.emptyChartText, { color: colors.textMuted }]}>
+                    Niciun simbol în această listă. Adaugă simboluri folosind butonul de mai jos.
+                  </Text>
+                </View>
+              ) : (
+                favorites.map((sym) => (
+                  <FavoriteCard
+                    key={sym}
+                    symbol={sym}
+                    quote={quotes[sym]}
+                    isSelected={sym === selectedSymbol}
+                    onSelect={handleSelectFavoriteCard}
+                  />
+                ))
+              )}
+
+              <TouchableOpacity
+                style={[styles.addFavBtn, { borderColor: colors.cardBorder, marginTop: 8 }]}
+                onPress={() => setSetupModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.addFavText, { color: colors.textMuted }]}>+ Adaugă simbol în listă</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : selectedSymbol ? (
+            // Full width Chart on mobile
+            <WatchlistChart
+              symbol={selectedSymbol}
+              quote={quotes[selectedSymbol]}
+              isKiosk={false}
+              onToggleKiosk={handleToggleKiosk}
+              favorites={favorites}
+              onSelectSymbol={setSelectedSymbol}
+              countdown={countdown}
+              isRefreshing={isRefreshing}
+              onManualRefresh={manualRefresh}
+            />
+          ) : (
+            <View style={styles.emptyChartState}>
+              <Text style={[styles.emptyChartText, { color: colors.textMuted }]}>
+                Selectează un simbol din carusel pentru a vizualiza graficul live.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Setup Modal */}
+        <FavoritesSetupModal
+          visible={setupModalVisible}
+          allSymbols={allSymbols}
+          currentFavorites={favorites}
+          onSaveFavorites={handleSaveFavorites}
+          onClose={() => setSetupModalVisible(false)}
+          allLists={allLists}
+          activeListId={activeListId}
+          onSwitchList={switchList}
+        />
+      </View>
+    );
+  }
+
+  // ─── RENDER ALLVIEW / TABLET / DESKTOP LANDSCAPE LAYOUT ───
   return (
     <View style={[styles.container, isKiosk && styles.containerKiosk, { backgroundColor: colors.background }]}>
-      {/* 2-Column Split Landscape Layout (800x420) */}
+      {/* 2-Column Split Landscape Layout (800x420 & Tablets) */}
       <View style={styles.contentRow}>
-        {/* Left Column: Favorites Sidebar (240px) */}
+        {/* Left Column: Favorites Sidebar (236px) */}
         {!isKiosk && !isSidebarCollapsed && (
           <View style={styles.leftColumn}>
             <View style={styles.sidebarHeader}>
-              {/* Multi-List Picker replaces the old static title */}
               <FavoriteListPicker
                 allLists={allLists}
                 activeListId={activeListId}
@@ -171,9 +480,7 @@ export default function WatchlistScreen({
             {listsLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={colors.textMuted} />
-                <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-                  Se încarcă listele...
-                </Text>
+                <Text style={[styles.loadingText, { color: colors.textMuted }]}>Se încarcă listele...</Text>
               </View>
             ) : (
               <ScrollView
@@ -204,9 +511,7 @@ export default function WatchlistScreen({
               onPress={() => setSetupModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.addFavText, { color: colors.textMuted }]}>
-                + Adaugă simbol
-              </Text>
+              <Text style={[styles.addFavText, { color: colors.textMuted }]}>+ Adaugă simbol</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -341,7 +646,7 @@ export default function WatchlistScreen({
         </View>
       </View>
 
-      {/* Favorites Setup Modal — now multi-list aware */}
+      {/* Favorites Setup Modal */}
       <FavoritesSetupModal
         visible={setupModalVisible}
         allSymbols={allSymbols}
@@ -357,13 +662,14 @@ export default function WatchlistScreen({
 }
 
 const styles = StyleSheet.create({
+  // Allview / Tablet / Desktop Layout
   container: {
     flex: 1,
     padding: 8,
   },
   containerKiosk: {
     padding: 4,
-    paddingRight: 28, // Pastreaza mai mult spatiu la dreapta pt modul kiosk
+    paddingRight: 28,
   },
   contentRow: {
     flex: 1,
@@ -402,6 +708,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+    paddingVertical: 20,
   },
   loadingText: {
     fontSize: 11,
@@ -494,8 +801,131 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 16,
   },
   emptyChartText: {
     fontSize: 12,
+    textAlign: 'center',
+  },
+
+  // ─── Mobile Portrait Specific Styles ───
+  containerMobile: {
+    flex: 1,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  mobileControlBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  mobileViewTabs: {
+    flexDirection: 'row',
+    borderRadius: 7,
+    backgroundColor: 'rgba(150, 150, 150, 0.12)',
+    padding: 2,
+    gap: 2,
+  },
+  mobileViewTab: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 5,
+  },
+  mobileViewTabText: {
+    fontSize: 11,
+  },
+  mobileRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mobileTickerSection: {
+    marginBottom: 6,
+  },
+  mobileTickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
+  mobileListPickerWrap: {
+    flex: 1,
+  },
+  mobileSubmodeToggle: {
+    flexDirection: 'row',
+    borderRadius: 6,
+    backgroundColor: 'rgba(150, 150, 150, 0.12)',
+    padding: 2,
+    gap: 2,
+  },
+  submodeBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  submodeBtnActive: {
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+  },
+  submodeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  mobileTickerScroll: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  mobileTickerChip: {
+    minWidth: 84,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  chipTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  chipSymbol: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  chipChange: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  chipPrice: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mobileAddChip: {
+    width: 68,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  mobileAddChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  mobileBody: {
+    flex: 1,
+  },
+  mobileCardsList: {
+    flex: 1,
+  },
+  mobileCardsContent: {
+    paddingBottom: 16,
   },
 });

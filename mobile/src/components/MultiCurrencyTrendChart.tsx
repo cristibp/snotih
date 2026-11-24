@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Dimensions, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Line, Path, Circle, Text as SvgText, Rect, G } from 'react-native-svg';
 import { TrendPoint30Days } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
@@ -52,11 +52,10 @@ const SERIES_LIST: SeriesConfig[] = [
   },
 ];
 
-const screenWidth = Dimensions.get('window').width;
-
 export default function MultiCurrencyTrendChart({ data }: MultiCurrencyTrendChartProps) {
   const { colors, isBlack } = useTheme();
-  const [containerWidth, setContainerWidth] = useState<number>(screenWidth - 48);
+  const { width: windowWidth } = useWindowDimensions();
+  const [containerWidth, setContainerWidth] = useState<number>(windowWidth - 48);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [selectedSeries, setSelectedSeries] = useState<string | null>(null);
 

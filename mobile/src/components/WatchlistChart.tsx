@@ -99,8 +99,11 @@ export default function WatchlistChart({
     }
   };
 
+  const isCompactWidth = containerWidth < 460;
   const chartHeight = isKiosk
     ? Math.max(250, Math.min(containerHeight - (favorites && favorites.length > 1 ? 140 : 110), 520))
+    : containerHeight > 340
+    ? Math.max(200, Math.min(containerHeight - (isCompactWidth ? 150 : 115), 450))
     : 210;
 
   const currentFavIndex = favorites ? favorites.indexOf(symbol) : -1;
@@ -156,7 +159,7 @@ export default function WatchlistChart({
   };
 
   // Calcule geometrice pentru SVG
-  const paddingLeft = 48;
+  const paddingLeft = isCompactWidth ? 36 : 48;
   const paddingRight = isKiosk ? 36 : 14;
   const paddingTop = 14;
   const paddingBottom = 24;
@@ -852,6 +855,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 4,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   titleColumn: {
     flex: 1,
@@ -1036,12 +1041,16 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     borderTopWidth: 1,
     paddingTop: 8,
     marginTop: 2,
+    gap: 4,
   },
   metricItem: {
     alignItems: 'center',
+    minWidth: 52,
   },
   metricLabel: {
     fontSize: 10,

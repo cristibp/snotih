@@ -140,19 +140,24 @@ export default function FavoritesBloombergGrid({
     }
   };
 
-  // Calcul numar coloane si latime card
-  // In Kiosk / Full Screen utilizam eficient intreaga latime a ecranului
+  // Calcul numar coloane si latime card adaptiv
+  // In modul mobil (ecran ingust < 460px), 1 coloana pe toata latimea
+  // In tableta / Allview (460 - 680px), 2 coloane
+  // In tableta extinsa / landscape (680 - 1050px), 3 coloane
+  // In ecran mare / desktop (> 1050px), 4 coloane
   const numColumns =
     gridWidth > 1050 && favorites.length >= 4
       ? 4
       : gridWidth > 680 && favorites.length >= 3
       ? 3
-      : 2;
+      : gridWidth >= 460 && favorites.length >= 2
+      ? 2
+      : 1;
   const cardGap = isKiosk ? 10 : 8;
   const paddingLeft = 8;
   const paddingRight = isKiosk ? 28 : 8;
   const cardWidth = Math.max(
-    140,
+    130,
     Math.floor((gridWidth - paddingLeft - paddingRight - (numColumns - 1) * cardGap) / numColumns)
   );
 
@@ -637,6 +642,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
     paddingHorizontal: 4,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   titleArea: {
     flex: 1,
