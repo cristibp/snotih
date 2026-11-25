@@ -266,8 +266,18 @@ export async function fetchWatchlistSymbols(): Promise<WatchlistSymbolMeta[]> {
 /**
  * Preluare cotatii in timp real pentru o lista de simboluri (cu Finnhub primary + Yahoo fallback).
  */
-export async function fetchWatchlistQuotes(symbols?: string[]): Promise<WatchlistQuotesResponse> {
-  const queryParam = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}` : '';
+export async function fetchWatchlistQuotes(
+  symbols?: string[],
+  forceRefresh: boolean = false
+): Promise<WatchlistQuotesResponse> {
+  const params: string[] = [];
+  if (symbols && symbols.length > 0) {
+    params.push(`symbols=${encodeURIComponent(symbols.join(','))}`);
+  }
+  if (forceRefresh) {
+    params.push('refresh=true');
+  }
+  const queryParam = params.length > 0 ? `?${params.join('&')}` : '';
   const response = await fetch(`${API_BASE_URL}/api/watchlist/quotes${queryParam}`);
   if (!response.ok) {
     throw new Error(`Nu s-au putut prelua cotatiile watchlist (status ${response.status})`);
@@ -281,10 +291,12 @@ export async function fetchWatchlistQuotes(symbols?: string[]): Promise<Watchlis
 export async function fetchWatchlistHistory(
   symbol: string,
   range: string = '1d',
-  interval: string = '5m'
+  interval: string = '5m',
+  forceRefresh: boolean = false
 ): Promise<WatchlistHistoryResponse> {
+  const refreshParam = forceRefresh ? '&refresh=true' : '';
   const response = await fetch(
-    `${API_BASE_URL}/api/watchlist/history/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`
+    `${API_BASE_URL}/api/watchlist/history/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}${refreshParam}`
   );
   if (!response.ok) {
     throw new Error(`Nu s-au putut prelua datele istorice pentru ${symbol} (status ${response.status})`);

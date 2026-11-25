@@ -25,14 +25,15 @@ export function resetHistoryCache(): void {
 export async function fetchWatchlistCandles(
   symbol: string,
   range: string = '1d',
-  interval: string = '5m'
+  interval: string = '5m',
+  forceRefresh: boolean = false
 ): Promise<WatchlistHistoryResponse> {
   const cleanSym = symbol.trim().toUpperCase();
   const cacheKey = `${cleanSym}_${range}_${interval}`;
   const now = Date.now();
 
   const cached = historyCache.get(cacheKey);
-  if (cached && now - cached.cachedAt < watchlistConfig.historyCacheTtlMs) {
+  if (!forceRefresh && cached && now - cached.cachedAt < watchlistConfig.historyCacheTtlMs) {
     return cached.data;
   }
 

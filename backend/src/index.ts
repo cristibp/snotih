@@ -1157,7 +1157,8 @@ app.get('/api/watchlist/quotes', async (req, res) => {
       symbolsToFetch = catalog.slice(0, 10).map((s) => s.symbol);
     }
 
-    const quotes = await getQuotesForSymbols(symbolsToFetch);
+    const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+    const quotes = await getQuotesForSymbols(symbolsToFetch, forceRefresh);
     return res.json({
       timestamp: new Date().toISOString(),
       quotes,
@@ -1186,8 +1187,9 @@ app.get('/api/watchlist/history/:symbol', async (req, res) => {
 
     const range = (req.query.range as string) || '1d';
     const interval = (req.query.interval as string) || '5m';
+    const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
 
-    const history = await fetchWatchlistCandles(symbol, range, interval);
+    const history = await fetchWatchlistCandles(symbol, range, interval, forceRefresh);
     return res.json(history);
   } catch (err: any) {
     console.error(`Eroare la /api/watchlist/history/${req.params.symbol}:`, err);

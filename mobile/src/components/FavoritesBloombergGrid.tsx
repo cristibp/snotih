@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, {
   Circle,
   Defs,
@@ -23,10 +24,45 @@ import { fetchWatchlistHistory } from '../api/client';
 import { CandlePoint, MarketQuote } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
 
+const PINNED_STORAGE_KEY = '@watchlist_bloomberg_pinned';
+
+function readInitialPinnedMap(): Record<string, string[]> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(PINNED_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, string[]>;
+        }
+      }
+    }
+  } catch {
+    // Ignore storage read error
+  }
+  return {};
+}
+
+function persistPinnedMap(map: Record<string, string[]>): void {
+  const serialized = JSON.stringify(map);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(PINNED_STORAGE_KEY, serialized);
+    }
+  } catch {
+    // Ignore web storage write error
+  }
+  AsyncStorage.setItem(PINNED_STORAGE_KEY, serialized).catch((err) => {
+    console.warn('Failed to save pinned symbols to AsyncStorage:', err);
+  });
+}
+
 interface FavoritesBloombergGridProps {
   favorites: string[];
   quotes: Record<string, MarketQuote>;
   onSelectSymbol: (symbol: string) => void;
+  listId?: string;
+  onRefreshSymbol?: (symbol: string) => Promise<void> | void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   isKiosk?: boolean;
@@ -51,10 +87,35 @@ interface MiniChartData {
   error?: string;
 }
 
+interface HoverPointState {
+  index: number;
+  price: number;
+  timestamp: number;
+}
+
+const MONTHS_RO = ['Ian', 'Feb', 'Mar', 'Apr', 'Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Noi', 'Dec'];
+
+function formatHoverTimestamp(timestamp: number, tf: string): string {
+  const d = new Date(timestamp);
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (tf === '1D') {
+    return timeStr;
+  }
+  if (tf === '5D') {
+    return `${d.getDate()}/${d.getMonth() + 1} ${timeStr}`;
+  }
+  if (tf === '1M') {
+    return `${d.getDate()} ${MONTHS_RO[d.getMonth()]}`;
+  }
+  return `${d.getDate()} ${MONTHS_RO[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
+}
+
 export default function FavoritesBloombergGrid({
   favorites,
   quotes,
   onSelectSymbol,
+  listId,
+  onRefreshSymbol,
   isSidebarCollapsed = false,
   onToggleSidebar,
   isKiosk = false,
@@ -68,9 +129,97 @@ export default function FavoritesBloombergGrid({
   const [gridWidth, setGridWidth] = useState<number>(540);
   const [histories, setHistories] = useState<Record<string, MiniChartData>>({});
   const [globalLoading, setGlobalLoading] = useState<boolean>(true);
-  const [hoverData, setHoverData] = useState<Record<string, { price: number; timestamp: number } | null>>({});
+  const [hoverData, setHoverData] = useState<Record<string, HoverPointState | null>>({});
+  const [pinnedByList, setPinnedByList] = useState<Record<string, string[]>>(readInitialPinnedMap);
+  const [refreshingSymbols, setRefreshingSymbols] = useState<Record<string, boolean>>({});
+  const hasUserToggledPinRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const chartWrapperRefs = useRef<Record<string, View | null>>({});
 
   const activeTfConfig = TIMEFRAMES.find((t) => t.label === selectedTf) || TIMEFRAMES[0];
+  const activeTfKey = `${activeTfConfig.range}_${activeTfConfig.interval}`;
+  const activeTfKeyRef = useRef(activeTfKey);
+  activeTfKeyRef.current = activeTfKey;
+
+  const effectiveListKey = listId || 'default';
+
+  // Hidratare din AsyncStorage pentru platformele native
+  useEffect(() => {
+    isMountedRef.current = true;
+    AsyncStorage.getItem(PINNED_STORAGE_KEY)
+      .then((raw) => {
+        if (!isMountedRef.current || hasUserToggledPinRef.current || !raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setPinnedByList(parsed as Record<string, string[]>);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const pinnedSymbols = useMemo(
+    () => pinnedByList[effectiveListKey] || [],
+    [pinnedByList, effectiveListKey]
+  );
+  const pinnedSet = useMemo(() => new Set(pinnedSymbols), [pinnedSymbols]);
+
+  const orderedFavorites = useMemo(() => {
+    if (pinnedSymbols.length === 0) return favorites;
+    const favSet = new Set(favorites);
+    const pinnedFirst = pinnedSymbols.filter((sym) => favSet.has(sym));
+    const pinnedFirstSet = new Set(pinnedFirst);
+    const rest = favorites.filter((sym) => !pinnedFirstSet.has(sym));
+    return [...pinnedFirst, ...rest];
+  }, [favorites, pinnedSymbols]);
+
+  const togglePin = useCallback(
+    (symbol: string) => {
+      hasUserToggledPinRef.current = true;
+      setPinnedByList((prev) => {
+        const current = prev[effectiveListKey] || [];
+        const nextForList = current.includes(symbol)
+          ? current.filter((s) => s !== symbol)
+          : [...current, symbol];
+        const next = { ...prev, [effectiveListKey]: nextForList };
+        persistPinnedMap(next);
+        return next;
+      });
+    },
+    [effectiveListKey]
+  );
+
+  const handleRefreshSymbol = useCallback(
+    async (symbol: string) => {
+      if (refreshingSymbols[symbol]) return;
+      const requestTfKey = activeTfKeyRef.current;
+      setRefreshingSymbols((prev) => ({ ...prev, [symbol]: true }));
+      try {
+        const [histRes] = await Promise.all([
+          fetchWatchlistHistory(symbol, activeTfConfig.range, activeTfConfig.interval, true).catch(() => null),
+          Promise.resolve(onRefreshSymbol?.(symbol)).catch(() => {}),
+        ]);
+        if (histRes && isMountedRef.current && activeTfKeyRef.current === requestTfKey) {
+          setHistories((prev) => ({
+            ...prev,
+            [symbol]: {
+              symbol,
+              candles: histRes.candles || [],
+              previousClose: histRes.previousClose,
+              isLoading: false,
+            },
+          }));
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setRefreshingSymbols((prev) => ({ ...prev, [symbol]: false }));
+        }
+      }
+    },
+    [activeTfConfig.interval, activeTfConfig.range, onRefreshSymbol, refreshingSymbols]
+  );
 
   // Incarcare lumanari istorice pentru toate favoritele in paralel
   useEffect(() => {
@@ -238,32 +387,74 @@ export default function FavoritesBloombergGrid({
 
     const handleTouchTile = (evt: any) => {
       if (pts.length < 2) return;
-      const locX = evt.nativeEvent.locationX;
+
+      let locX: number | undefined;
+      const clientX = evt?.nativeEvent?.clientX ?? evt?.clientX;
+      if (typeof clientX === 'number') {
+        const node = (chartWrapperRefs.current[symbol] || evt?.currentTarget) as any;
+        const rect = node && typeof node.getBoundingClientRect === 'function'
+          ? node.getBoundingClientRect()
+          : null;
+        if (rect) {
+          locX = clientX - rect.left;
+        }
+      }
+
+      if (locX === undefined) {
+        locX = evt?.nativeEvent?.locationX ?? evt?.nativeEvent?.offsetX;
+      }
+
+      if (typeof locX !== 'number' || Number.isNaN(locX)) return;
+
       const clampedX = Math.max(padL, Math.min(padL + plotW, locX));
       const ratio = (clampedX - padL) / plotW;
       const rawIdx = Math.round(ratio * (pts.length - 1));
       const idx = Math.max(0, Math.min(pts.length - 1, rawIdx));
       const targetPt = pts[idx];
-      if (targetPt) {
-        setHoverData((prev) => ({
+      if (!targetPt) return;
+
+      setHoverData((prev) => {
+        const current = prev[symbol];
+        if (
+          current &&
+          current.index === idx &&
+          current.price === targetPt.close &&
+          current.timestamp === targetPt.timestamp
+        ) {
+          return prev;
+        }
+        return {
           ...prev,
-          [symbol]: { price: targetPt.close, timestamp: targetPt.timestamp },
-        }));
-      }
+          [symbol]: {
+            index: idx,
+            price: targetPt.close,
+            timestamp: targetPt.timestamp,
+          },
+        };
+      });
     };
 
     const handleTouchEnd = () => {
-      setHoverData((prev) => ({
-        ...prev,
-        [symbol]: null,
-      }));
+      setHoverData((prev) => {
+        if (!prev[symbol]) return prev;
+        return {
+          ...prev,
+          [symbol]: null,
+        };
+      });
     };
 
+    const activeHoverPt = hover && pts[hover.index] ? pts[hover.index] : null;
+    const hoverTimeStr = hover ? formatHoverTimestamp(hover.timestamp, selectedTf) : '';
+
     const formattedTime = hover
-      ? new Date(hover.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ? hoverTimeStr
       : quote?.timestamp
       ? new Date(quote.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : '';
+
+    const isPinned = pinnedSet.has(symbol);
+    const isSymbolRefreshing = Boolean(refreshingSymbols[symbol]);
 
     return (
       <View
@@ -273,7 +464,7 @@ export default function FavoritesBloombergGrid({
           {
             width: cardWidth,
             backgroundColor: isBlack ? '#1E293B' : colors.card,
-            borderColor: colors.cardBorder,
+            borderColor: isPinned ? '#3B82F6' : colors.cardBorder,
           },
         ]}
       >
@@ -287,19 +478,72 @@ export default function FavoritesBloombergGrid({
               <Text style={styles.sourceBadgeText}>{sourceBadge}</Text>
             </View>
             {formattedTime ? (
-              <Text style={[styles.timeText, { color: colors.textMuted }]}>{formattedTime}</Text>
+              <Text
+                style={[
+                  styles.timeText,
+                  { color: hover ? '#3B82F6' : colors.textMuted },
+                  hover && styles.timeTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {formattedTime}
+              </Text>
             ) : null}
           </View>
 
-          <TouchableOpacity
-            style={[styles.zoomBtn, { backgroundColor: isBlack ? '#334155' : '#E2E8F0' }]}
-            onPress={() => onSelectSymbol(symbol)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={`Vizualizează detaliat ${symbol}`}
-          >
-            <Text style={styles.zoomBtnText}>🔍</Text>
-          </TouchableOpacity>
+          <View style={styles.tileHeaderActions}>
+            <TouchableOpacity
+              style={[
+                styles.miniRefreshBtn,
+                { backgroundColor: isBlack ? '#334155' : '#E2E8F0' },
+              ]}
+              onPress={() => handleRefreshSymbol(symbol)}
+              disabled={isSymbolRefreshing}
+              activeOpacity={0.7}
+              hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Actualizează ${symbol}`}
+            >
+              {isSymbolRefreshing ? (
+                <ActivityIndicator size="small" color="#3B82F6" style={styles.miniSpinner} />
+              ) : (
+                <Text style={[styles.miniRefreshText, { color: colors.textMuted }]}>↻</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.miniActionBtn,
+                {
+                  backgroundColor: isPinned
+                    ? 'rgba(59, 130, 246, 0.22)'
+                    : isBlack
+                    ? '#334155'
+                    : '#E2E8F0',
+                  borderColor: isPinned ? '#3B82F6' : 'transparent',
+                  borderWidth: isPinned ? 1 : 0,
+                },
+              ]}
+              onPress={() => togglePin(symbol)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+              accessibilityRole="button"
+              accessibilityLabel={isPinned ? `Anulează fixarea ${symbol}` : `Fixează ${symbol} la început`}
+            >
+              <Text style={[styles.miniActionText, { opacity: isPinned ? 1 : 0.5 }]}>📌</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.zoomBtn, { backgroundColor: isBlack ? '#334155' : '#E2E8F0' }]}
+              onPress={() => onSelectSymbol(symbol)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Vizualizează detaliat ${symbol}`}
+            >
+              <Text style={styles.zoomBtnText}>🔍</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Company / ETF Name */}
@@ -331,17 +575,7 @@ export default function FavoritesBloombergGrid({
         </View>
 
         {/* Mini SVG Evolution Chart Area */}
-        <View
-          style={styles.svgWrapper}
-          onTouchStart={handleTouchTile}
-          onTouchMove={handleTouchTile}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
-          // @ts-ignore
-          onMouseMove={handleTouchTile}
-          // @ts-ignore
-          onMouseLeave={handleTouchEnd}
-        >
+        <View style={[styles.svgWrapper, { height: svgHeight }]}>
           {isLoadingCandles ? (
             <View style={styles.tileLoadingContainer}>
               <ActivityIndicator size="small" color="#3B82F6" />
@@ -353,86 +587,148 @@ export default function FavoritesBloombergGrid({
               </Text>
             </View>
           ) : (
-            <Svg width={svgWidth} height={svgHeight}>
-              <Defs>
-                <LinearGradient id={`grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0%" stopColor={accentColor} stopOpacity="0.35" />
-                  <Stop offset="100%" stopColor={accentColor} stopOpacity="0.0" />
-                </LinearGradient>
-              </Defs>
+            <View
+              ref={(el) => {
+                chartWrapperRefs.current[symbol] = el;
+              }}
+              style={{ width: svgWidth, height: svgHeight }}
+              onTouchStart={handleTouchTile}
+              onTouchMove={handleTouchTile}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+              // @ts-ignore
+              onMouseEnter={handleTouchTile}
+              // @ts-ignore
+              onMouseMove={handleTouchTile}
+              // @ts-ignore
+              onMouseLeave={handleTouchEnd}
+            >
+              <Svg width={svgWidth} height={svgHeight} pointerEvents="none">
+                <Defs>
+                  <LinearGradient id={`grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0%" stopColor={accentColor} stopOpacity="0.35" />
+                    <Stop offset="100%" stopColor={accentColor} stopOpacity="0.0" />
+                  </LinearGradient>
+                </Defs>
 
-              {/* Linia de referinta inchidere precedenta */}
-              {prevCloseY !== null && (
-                <Line
-                  x1={padL}
-                  y1={prevCloseY}
-                  x2={padL + plotW}
-                  y2={prevCloseY}
-                  stroke={isBlack ? '#64748B' : '#94A3B8'}
-                  strokeWidth={1}
-                  strokeDasharray="2,3"
-                  opacity={0.6}
-                />
-              )}
-
-              {/* Area fill sub curba */}
-              <Path d={areaPath} fill={`url(#grad-${symbol})`} />
-
-              {/* Linia de pret evolutie */}
-              <Path
-                d={linePath}
-                fill="none"
-                stroke={accentColor}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              {/* Punct activ la scrubbing */}
-              {hover && pts.length > 0 && (
-                <G key="hover-point">
+                {/* Linia de referinta inchidere precedenta */}
+                {prevCloseY !== null && (
                   <Line
-                    x1={
-                      padL +
-                      (pts.findIndex((p) => p.close === hover.price) >= 0
-                        ? (pts.findIndex((p) => p.close === hover.price) / (pts.length - 1)) * plotW
-                        : plotW / 2)
-                    }
-                    y1={padT}
-                    x2={
-                      padL +
-                      (pts.findIndex((p) => p.close === hover.price) >= 0
-                        ? (pts.findIndex((p) => p.close === hover.price) / (pts.length - 1)) * plotW
-                        : plotW / 2)
-                    }
-                    y2={padT + plotH}
-                    stroke="#3B82F6"
+                    x1={padL}
+                    y1={prevCloseY}
+                    x2={padL + plotW}
+                    y2={prevCloseY}
+                    stroke={isBlack ? '#64748B' : '#94A3B8'}
                     strokeWidth={1}
-                    strokeDasharray="2,2"
+                    strokeDasharray="2,3"
+                    opacity={0.6}
                   />
-                  <Circle
-                    cx={
-                      padL +
-                      (pts.findIndex((p) => p.close === hover.price) >= 0
-                        ? (pts.findIndex((p) => p.close === hover.price) / (pts.length - 1)) * plotW
-                        : plotW / 2)
-                    }
-                    cy={padT + plotH - ((hover.price - minVal) / Math.max(0.001, maxVal - minVal)) * plotH}
-                    r={3.5}
-                    fill="#3B82F6"
-                    stroke="#FFFFFF"
-                    strokeWidth={1.5}
-                  />
-                </G>
-              )}
+                )}
 
-              {/* Suprafata transparenta pentru captura atingerilor */}
-              <Rect x={padL} y={padT} width={plotW} height={plotH} fill="transparent" />
-            </Svg>
+                {/* Area fill sub curba */}
+                <Path d={areaPath} fill={`url(#grad-${symbol})`} />
+
+                {/* Linia de pret evolutie */}
+                <Path
+                  d={linePath}
+                  fill="none"
+                  stroke={accentColor}
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {/* Crosshair, punct activ si tooltip pret la hover/scrubbing */}
+                {activeHoverPt && (() => {
+                  const priceLabel = `${currencySymbol}${activeHoverPt.close.toFixed(2)}`;
+                  const tooltipW = Math.min(plotW - 4, Math.max(76, Math.max(priceLabel.length, hoverTimeStr.length) * 6.2 + 16));
+                  const tooltipH = 26;
+                  const preferLeft = activeHoverPt.x > padL + plotW * 0.55;
+                  let tooltipX = preferLeft
+                    ? activeHoverPt.x - tooltipW - 8
+                    : activeHoverPt.x + 8;
+                  tooltipX = Math.max(padL + 2, Math.min(padL + plotW - tooltipW - 2, tooltipX));
+
+                  const tooltipY = activeHoverPt.y < padT + plotH * 0.45
+                    ? Math.min(padT + plotH - tooltipH - 2, padT + plotH * 0.52)
+                    : padT + 2;
+
+                  return (
+                    <G key="hover-point">
+                      <Line
+                        x1={activeHoverPt.x}
+                        y1={padT}
+                        x2={activeHoverPt.x}
+                        y2={padT + plotH}
+                        stroke="#3B82F6"
+                        strokeWidth={1}
+                        strokeDasharray="2,2"
+                      />
+                      <Line
+                        x1={padL}
+                        y1={activeHoverPt.y}
+                        x2={padL + plotW}
+                        y2={activeHoverPt.y}
+                        stroke="#3B82F6"
+                        strokeWidth={1}
+                        strokeDasharray="2,2"
+                        opacity={0.45}
+                      />
+                      <Circle
+                        cx={activeHoverPt.x}
+                        cy={activeHoverPt.y}
+                        r={6.5}
+                        fill="#3B82F6"
+                        opacity={0.22}
+                      />
+                      <Circle
+                        cx={activeHoverPt.x}
+                        cy={activeHoverPt.y}
+                        r={3.8}
+                        fill="#3B82F6"
+                        stroke="#FFFFFF"
+                        strokeWidth={1.5}
+                      />
+                      <Rect
+                        x={tooltipX}
+                        y={tooltipY}
+                        width={tooltipW}
+                        height={tooltipH}
+                        rx={5}
+                        fill={isBlack ? '#0F172A' : '#1E293B'}
+                        stroke="#3B82F6"
+                        strokeWidth={1}
+                        opacity={0.95}
+                      />
+                      <SvgText
+                        x={tooltipX + tooltipW / 2}
+                        y={tooltipY + 11}
+                        fill="#FFFFFF"
+                        fontSize="10"
+                        fontWeight="800"
+                        textAnchor="middle"
+                      >
+                        {priceLabel}
+                      </SvgText>
+                      <SvgText
+                        x={tooltipX + tooltipW / 2}
+                        y={tooltipY + 21}
+                        fill="#94A3B8"
+                        fontSize="8"
+                        fontWeight="600"
+                        textAnchor="middle"
+                      >
+                        {hoverTimeStr}
+                      </SvgText>
+                    </G>
+                  );
+                })()}
+              </Svg>
+            </View>
           )}
 
           {/* Range Labels H/L */}
-          {candles.length >= 2 && !isLoadingCandles && (
+          {candles.length >= 2 && !isLoadingCandles && !activeHoverPt && (
             <View style={styles.rangeLabelsRow}>
               <Text style={[styles.rangeLabelText, { color: colors.textMuted }]}>
                 L: {minVal.toFixed(1)}
@@ -619,7 +915,7 @@ export default function FavoritesBloombergGrid({
           showsVerticalScrollIndicator={true}
         >
           <View style={[styles.tilesGrid, { gap: cardGap }]}>
-            {favorites.map((sym) => renderBloombergTile(sym))}
+            {orderedFavorites.map((sym) => renderBloombergTile(sym))}
           </View>
         </ScrollView>
       )}
@@ -760,12 +1056,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    maxWidth: '82%',
+    flex: 1,
+    marginRight: 4,
+    overflow: 'hidden',
+  },
+  tileHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
   },
   symbolText: {
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.2,
+    flexShrink: 1,
   },
   sourceBadge: {
     paddingHorizontal: 3.5,
@@ -781,15 +1086,43 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginLeft: 2,
   },
+  timeTextActive: {
+    fontWeight: '700',
+  },
+  miniRefreshBtn: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniRefreshText: {
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
+  miniSpinner: {
+    transform: [{ scale: 0.55 }],
+  },
+  miniActionBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniActionText: {
+    fontSize: 9,
+  },
   zoomBtn: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   zoomBtnText: {
-    fontSize: 10,
+    fontSize: 9,
   },
   tileName: {
     fontSize: 10,

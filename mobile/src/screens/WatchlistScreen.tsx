@@ -93,6 +93,7 @@ export default function WatchlistScreen({
     error,
     countdown,
     manualRefresh,
+    refreshSymbol,
   } = useWatchlistPolling(isActive, activeSymbols);
 
   // Wrapper to save favorites through the multi-list system
@@ -338,6 +339,8 @@ export default function WatchlistScreen({
             <FavoritesBloombergGrid
               favorites={favorites}
               quotes={quotes}
+              listId={activeList?.id || activeListId}
+              onRefreshSymbol={refreshSymbol}
               onSelectSymbol={(sym) => {
                 setSelectedSymbol(sym);
                 setViewMode('detail');
@@ -651,6 +654,8 @@ export default function WatchlistScreen({
             <FavoritesBloombergGrid
               favorites={favorites}
               quotes={quotes}
+              listId={activeList?.id || activeListId}
+              onRefreshSymbol={refreshSymbol}
               onSelectSymbol={(sym) => {
                 setSelectedSymbol(sym);
                 setViewMode('detail');

@@ -134,13 +134,13 @@ export async function fetchYahooQuote(symbol: string): Promise<MarketQuote | nul
 /**
  * Obtine cotatia pentru un simbol cu caching si logica primar (Finnhub) -> fallback (Yahoo).
  */
-export async function getQuoteForSymbol(symbol: string): Promise<MarketQuote> {
+export async function getQuoteForSymbol(symbol: string, forceRefresh: boolean = false): Promise<MarketQuote> {
   const cleanSym = symbol.trim().toUpperCase();
   const now = Date.now();
 
-  // 1. Verificam cache-ul din memorie
+  // 1. Verificam cache-ul din memorie (daca nu s-a cerut refresh fortat)
   const cached = quoteMemoryCache.get(cleanSym);
-  if (cached && now - cached.cachedAt < watchlistConfig.cacheTtlMs) {
+  if (!forceRefresh && cached && now - cached.cachedAt < watchlistConfig.cacheTtlMs) {
     return {
       ...cached.quote,
       source: 'cached',
@@ -195,13 +195,16 @@ export async function getQuoteForSymbol(symbol: string): Promise<MarketQuote> {
 /**
  * Obtine cotatiile pentru o lista de simboluri in paralel.
  */
-export async function getQuotesForSymbols(symbols: string[]): Promise<Record<string, MarketQuote>> {
+export async function getQuotesForSymbols(
+  symbols: string[],
+  forceRefresh: boolean = false
+): Promise<Record<string, MarketQuote>> {
   const uniqueSymbols = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
   const results: Record<string, MarketQuote> = {};
 
   const quotePromises = uniqueSymbols.map(async (sym) => {
     try {
-      const q = await getQuoteForSymbol(sym);
+      const q = await getQuoteForSymbol(sym, forceRefresh);
       results[sym] = q;
     } catch (e) {
       results[sym] = {

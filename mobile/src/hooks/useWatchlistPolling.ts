@@ -155,6 +155,23 @@ export function useWatchlistPolling(
     await fetchQuotes(favorites);
   }, [fetchQuotes, favorites, pollingInterval]);
 
+  // 5b. Refresh individual pentru un singur simbol (bypass cache)
+  const refreshSymbol = useCallback(async (symbol: string) => {
+    const cleanSym = symbol.trim().toUpperCase();
+    if (!cleanSym) return;
+    try {
+      const res = await fetchWatchlistQuotes([cleanSym], true);
+      if (res?.quotes) {
+        setQuotes((prev) => ({
+          ...prev,
+          ...res.quotes,
+        }));
+      }
+    } catch (err) {
+      console.warn(`Eroare la refresh individual pentru ${cleanSym}:`, err);
+    }
+  }, []);
+
   // 6. Polling timer si countdown
   useEffect(() => {
     // Curatam timerele anterioare
@@ -259,5 +276,6 @@ export function useWatchlistPolling(
     lastUpdated,
     countdown,
     manualRefresh,
+    refreshSymbol,
   };
 }

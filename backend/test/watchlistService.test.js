@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const axios = require('axios');
 const { parseWatchlistCsv, loadWatchlistSymbols } = require('../dist/services/watchlistCsvLoader');
 const {
   getQuoteForSymbol,
@@ -58,6 +59,100 @@ test('marketQuoteService caches results in memory', async () => {
   assert.equal(quote2.source, 'cached');
   assert.equal(quote2.symbol, 'AAPL');
   assert.equal(quote2.price, quote1.price);
+});
+
+test('forceRefresh bypasses memory cache for quotes and history', async () => {
+  resetQuoteCache();
+  resetHistoryCache();
+
+  const originalAxiosGet = axios.get;
+  let quoteCallCount = 0;
+  let historyCallCount = 0;
+
+  axios.get = async (url) => {
+    if (url.includes('range=1d&interval=1d') || url.includes('interval=1d&range=1d')) {
+      quoteCallCount += 1;
+      const price = quoteCallCount === 1 ? 150 : 152.5;
+      return {
+        data: {
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: price,
+                  chartPreviousClose: 148,
+                  regularMarketDayHigh: 153,
+                  regularMarketDayLow: 149,
+                  regularMarketDayOpen: 149.5,
+                  regularMarketTime: 1700000000,
+                  currency: 'USD',
+                  shortName: 'Test Corp',
+                },
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    historyCallCount += 1;
+    const closePrice = historyCallCount === 1 ? 150 : 152.5;
+    return {
+      data: {
+        chart: {
+          result: [
+            {
+              meta: { currency: 'USD', chartPreviousClose: 148 },
+              timestamp: [1700000000, 1700000300],
+              indicators: {
+                quote: [
+                  {
+                    open: [149, 150],
+                    high: [151, closePrice],
+                    low: [148.5, 149.5],
+                    close: [150, closePrice],
+                    volume: [1000, 1200],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    };
+  };
+
+  try {
+    const q1 = await getQuoteForSymbol('TEST');
+    assert.equal(q1.price, 150);
+    assert.equal(q1.source, 'yahoo');
+
+    const qCached = await getQuoteForSymbol('TEST');
+    assert.equal(qCached.source, 'cached');
+    assert.equal(qCached.price, 150);
+    assert.equal(quoteCallCount, 1);
+
+    const qForced = await getQuoteForSymbol('TEST', true);
+    assert.equal(qForced.source, 'yahoo');
+    assert.equal(qForced.price, 152.5);
+    assert.equal(quoteCallCount, 2);
+
+    const h1 = await fetchWatchlistCandles('TEST', '1d', '5m');
+    assert.equal(h1.candles[1].close, 150);
+    assert.equal(historyCallCount, 1);
+
+    const hCached = await fetchWatchlistCandles('TEST', '1d', '5m');
+    assert.equal(hCached.candles[1].close, 150);
+    assert.equal(historyCallCount, 1);
+
+    const hForced = await fetchWatchlistCandles('TEST', '1d', '5m', true);
+    assert.equal(hForced.candles[1].close, 152.5);
+    assert.equal(historyCallCount, 2);
+  } finally {
+    axios.get = originalAxiosGet;
+    resetQuoteCache();
+    resetHistoryCache();
+  }
 });
 
 test('marketQuoteService fallback to Yahoo works for European tickers (e.g. VWCE.DE)', async () => {
