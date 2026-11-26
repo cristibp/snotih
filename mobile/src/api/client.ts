@@ -264,6 +264,22 @@ export async function fetchWatchlistSymbols(): Promise<WatchlistSymbolMeta[]> {
 }
 
 /**
+ * Cauta actiuni, ETF-uri si indici online pentru adaugare in watchlist.
+ */
+export async function searchWatchlistSymbols(query: string): Promise<WatchlistSymbolMeta[]> {
+  const clean = query.trim();
+  if (!clean) return [];
+  const response = await fetch(
+    `${API_BASE_URL}/api/watchlist/search?q=${encodeURIComponent(clean)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Eroare la cautarea simbolurilor (status ${response.status})`);
+  }
+  const data = await response.json();
+  return (data.symbols || []) as WatchlistSymbolMeta[];
+}
+
+/**
  * Preluare cotatii in timp real pentru o lista de simboluri (cu Finnhub primary + Yahoo fallback).
  */
 export async function fetchWatchlistQuotes(
@@ -336,8 +352,9 @@ export async function triggerGlobalSignalsDiscordAlert(webhookUrl?: string): Pro
 /**
  * Preia toate listele de favorite.
  */
-export async function fetchFavoriteLists(): Promise<FavoriteListsFile> {
-  const response = await fetch(`${API_BASE_URL}/api/favorites/lists`);
+export async function fetchFavoriteLists(forceRefresh: boolean = false): Promise<FavoriteListsFile> {
+  const query = forceRefresh ? '?refresh=true' : '';
+  const response = await fetch(`${API_BASE_URL}/api/favorites/lists${query}`);
   if (!response.ok) {
     throw new Error(`Eroare la preluarea listelor de favorite (status ${response.status})`);
   }

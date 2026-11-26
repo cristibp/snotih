@@ -6,6 +6,8 @@ const {
   getQuoteForSymbol,
   getQuotesForSymbols,
   resetQuoteCache,
+  searchMarketSymbols,
+  resetSearchCache,
 } = require('../dist/services/marketQuoteService');
 const {
   fetchWatchlistCandles,
@@ -162,4 +164,42 @@ test('marketQuoteService fallback to Yahoo works for European tickers (e.g. VWCE
   assert.equal(quote.symbol, 'VWCE.DE');
   assert.ok(quote.price > 0, `Expected price > 0, got ${quote.price}`);
   assert.ok(quote.source === 'yahoo' || quote.source === 'finnhub' || quote.source === 'cached');
+});
+
+test('searchMarketSymbols returns deduplicated normalized metadata and caches results', async () => {
+  resetSearchCache();
+  const originalAxiosGet = axios.get;
+  let searchCalls = 0;
+
+  axios.get = async (url) => {
+    searchCalls += 1;
+    assert.ok(url.includes('/v1/finance/search?q=NVDA'));
+    return {
+      data: {
+        quotes: [
+          { symbol: 'nvda', shortname: 'NVIDIA Corp', exchDisp: 'NASDAQ', quoteType: 'EQUITY' },
+          { symbol: 'NVDA', shortname: 'Duplicate NVDA', exchDisp: 'NASDAQ', quoteType: 'EQUITY' },
+          { symbol: 'NVDL', shortname: 'GraniteShares 2x Long NVDA', exchDisp: 'NASDAQ', quoteType: 'ETF' },
+        ],
+      },
+    };
+  };
+
+  try {
+    const res1 = await searchMarketSymbols('NVDA');
+    assert.equal(res1.length, 2);
+    assert.equal(res1[0].symbol, 'NVDA');
+    assert.equal(res1[0].name, 'NVIDIA Corp');
+    assert.equal(res1[0].category, 'Stock');
+    assert.equal(res1[1].symbol, 'NVDL');
+    assert.equal(res1[1].category, 'ETF');
+    assert.equal(searchCalls, 1);
+
+    const res2 = await searchMarketSymbols('nvda');
+    assert.equal(res2.length, 2);
+    assert.equal(searchCalls, 1);
+  } finally {
+    axios.get = originalAxiosGet;
+    resetSearchCache();
+  }
 });

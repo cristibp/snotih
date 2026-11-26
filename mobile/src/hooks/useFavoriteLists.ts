@@ -65,31 +65,49 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
   }, []);
 
   // ─── Load from API or local cache ───
-  const fetchAndApply = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await fetchFavoriteLists();
-      setAllLists(data.lists);
-      setDefaultListId(data.defaultListId);
-      await cacheLocally(data);
-      return data;
-    } catch (err: any) {
-      console.warn('[useFavoriteLists] API fetch failed, trying local cache:', err);
+  const fetchAndApply = useCallback(
+    async (forceRefresh = false) => {
       try {
-        const cached = await AsyncStorage.getItem(CACHED_LISTS_KEY);
-        if (cached) {
-          const data = JSON.parse(cached) as FavoriteListsFile;
-          setAllLists(data.lists);
-          setDefaultListId(data.defaultListId);
-          return data;
+        setError(null);
+        const data = await fetchFavoriteLists(forceRefresh);
+        setAllLists(data.lists);
+        setDefaultListId(data.defaultListId);
+        await cacheLocally(data);
+        return data;
+      } catch (err: any) {
+        console.warn('[useFavoriteLists] API fetch failed, trying local cache:', err);
+        try {
+          const cached = await AsyncStorage.getItem(CACHED_LISTS_KEY);
+          if (cached) {
+            const data = JSON.parse(cached) as FavoriteListsFile;
+            setAllLists(data.lists);
+            setDefaultListId(data.defaultListId);
+            return data;
+          }
+        } catch (_) {
+          // ignore
         }
-      } catch (_) {
-        // ignore
+        setError(err?.message || 'Eroare la incarcarea listelor de favorite.');
+        return null;
       }
-      setError(err?.message || 'Eroare la incarcarea listelor de favorite.');
-      return null;
-    }
-  }, [cacheLocally]);
+    },
+    [cacheLocally]
+  );
+
+  const applyUpdatedList = useCallback(
+    (updated: FavoriteList) => {
+      setAllLists((prev) => {
+        const nextLists = prev.map((l) => (l.id === updated.id ? updated : l));
+        cacheLocally({
+          version: 1,
+          defaultListId,
+          lists: nextLists,
+        });
+        return nextLists;
+      });
+    },
+    [cacheLocally, defaultListId]
+  );
 
   // ─── Migration: convert legacy AsyncStorage favorites to a GitHub list ───
   const migrateLegacyFavorites = useCallback(async () => {
@@ -170,7 +188,7 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
   // ─── Refetch (pull latest from GitHub) ───
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    await fetchAndApply();
+    await fetchAndApply(true);
     setIsLoading(false);
   }, [fetchAndApply]);
 
@@ -257,11 +275,15 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
   const addSymbols = useCallback(
     async (symbols: string[]) => {
       if (!activeList) return;
+      const cleaned = Array.from(
+        new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))
+      );
+      if (cleaned.length === 0) return;
       setIsSaving(true);
       setError(null);
       try {
-        await addSymbolsToFavoriteList(activeList.id, symbols);
-        await fetchAndApply();
+        const updated = await addSymbolsToFavoriteList(activeList.id, cleaned);
+        applyUpdatedList(updated);
       } catch (err: any) {
         setError(err?.message || 'Eroare la adaugarea simbolurilor.');
         throw err;
@@ -269,18 +291,22 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
         setIsSaving(false);
       }
     },
-    [activeList, fetchAndApply]
+    [activeList, applyUpdatedList]
   );
 
   // ─── Remove symbols from active list ───
   const removeSymbols = useCallback(
     async (symbols: string[]) => {
       if (!activeList) return;
+      const cleaned = Array.from(
+        new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))
+      );
+      if (cleaned.length === 0) return;
       setIsSaving(true);
       setError(null);
       try {
-        await removeSymbolsFromFavoriteList(activeList.id, symbols);
-        await fetchAndApply();
+        const updated = await removeSymbolsFromFavoriteList(activeList.id, cleaned);
+        applyUpdatedList(updated);
       } catch (err: any) {
         setError(err?.message || 'Eroare la stergerea simbolurilor.');
         throw err;
@@ -288,18 +314,21 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
         setIsSaving(false);
       }
     },
-    [activeList, fetchAndApply]
+    [activeList, applyUpdatedList]
   );
 
   // ─── Replace entire symbols list ───
   const setSymbols = useCallback(
     async (symbols: string[]) => {
       if (!activeList) return;
+      const cleaned = Array.from(
+        new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))
+      );
       setIsSaving(true);
       setError(null);
       try {
-        await updateFavoriteList(activeList.id, { symbols });
-        await fetchAndApply();
+        const updated = await updateFavoriteList(activeList.id, { symbols: cleaned });
+        applyUpdatedList(updated);
       } catch (err: any) {
         setError(err?.message || 'Eroare la actualizarea simbolurilor.');
         throw err;
@@ -307,7 +336,7 @@ export function useFavoriteLists(): UseFavoriteListsReturn {
         setIsSaving(false);
       }
     },
-    [activeList, fetchAndApply]
+    [activeList, applyUpdatedList]
   );
 
   return {

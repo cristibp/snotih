@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchWatchlistQuotes, fetchWatchlistSymbols } from '../api/client';
-import { MarketQuote, WatchlistSymbolMeta } from '../api/types';
+import { fetchWatchlistQuotes } from '../api/client';
+import { MarketQuote } from '../api/types';
 
 export const POLLING_STORAGE_KEY = '@watchlist_polling_cadence';
 export const FAVORITES_STORAGE_KEY = '@watchlist_favorites';
@@ -17,8 +17,8 @@ export const POLLING_INTERVAL_OPTIONS = [
 ];
 
 /**
- * Hook for watchlist polling. Accepts an external `favorites` list (from useFavoriteLists)
- * or falls back to its own AsyncStorage-managed favorites for backward compatibility.
+ * Hook for watchlist polling. Accepts an external `favorites` list (from GitHub-backed useFavoriteLists)
+ * or falls back to its own AsyncStorage-managed favorites if no external list is provided.
  */
 export function useWatchlistPolling(
   isActive: boolean = true,
@@ -26,8 +26,9 @@ export function useWatchlistPolling(
 ) {
   const [pollingInterval, setPollingIntervalState] = useState<number>(DEFAULT_POLLING_SECONDS);
   const [internalFavorites, setInternalFavoritesState] = useState<string[]>(DEFAULT_FAVORITES);
-  const [allSymbols, setAllSymbols] = useState<WatchlistSymbolMeta[]>([]);
-  const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_FAVORITES[0]);
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(
+    externalFavorites !== undefined ? externalFavorites[0] || '' : DEFAULT_FAVORITES[0]
+  );
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -39,10 +40,10 @@ export function useWatchlistPolling(
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isBackgroundedRef = useRef<boolean>(false);
   const lastFetchedTimestampRef = useRef<number>(Date.now());
-  const prevIsActiveRef = useRef<boolean>(isActive);
+  const prevFavoritesKeyRef = useRef<string>('');
 
-  // Determine which favorites to use: external (from useFavoriteLists) or internal (AsyncStorage)
-  const useExternal = externalFavorites !== undefined && externalFavorites.length > 0;
+  // GitHub watchlists (externalFavorites) are the single source of truth when provided, even if empty
+  const useExternal = externalFavorites !== undefined;
   const favorites = useExternal ? externalFavorites : internalFavorites;
 
   // 1. Incarcare configuratii salvate din storage la mount
@@ -50,17 +51,12 @@ export function useWatchlistPolling(
     let isMounted = true;
     (async () => {
       try {
-        const [savedCadence, savedFavs, catalog] = await Promise.all([
+        const [savedCadence, savedFavs] = await Promise.all([
           AsyncStorage.getItem(POLLING_STORAGE_KEY),
           useExternal ? Promise.resolve(null) : AsyncStorage.getItem(FAVORITES_STORAGE_KEY),
-          fetchWatchlistSymbols().catch(() => []),
         ]);
 
         if (isMounted) {
-          if (catalog && catalog.length > 0) {
-            setAllSymbols(catalog);
-          }
-
           if (savedCadence) {
             const parsed = parseInt(savedCadence, 10);
             if (!isNaN(parsed) && parsed > 0) {
@@ -93,8 +89,12 @@ export function useWatchlistPolling(
 
   // Update selectedSymbol when external favorites change
   useEffect(() => {
-    if (useExternal && externalFavorites.length > 0) {
-      if (!externalFavorites.includes(selectedSymbol)) {
+    if (useExternal) {
+      if (externalFavorites.length === 0) {
+        if (selectedSymbol !== '') {
+          setSelectedSymbol('');
+        }
+      } else if (!externalFavorites.includes(selectedSymbol)) {
         setSelectedSymbol(externalFavorites[0]);
       }
     }
@@ -102,7 +102,12 @@ export function useWatchlistPolling(
 
   // 2. Fetch cotatii pentru lista de favorite
   const fetchQuotes = useCallback(async (favList: string[]) => {
-    if (!favList || favList.length === 0) return;
+    if (!favList || favList.length === 0) {
+      setQuotes({});
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
     try {
       setError(null);
       const res = await fetchWatchlistQuotes(favList);
@@ -184,10 +189,20 @@ export function useWatchlistPolling(
 
     setCountdown(pollingInterval);
 
-    // Initial fetch la prima rulare daca nu avem cotatii sau daca a trecut timpul
-    const elapsed = Date.now() - lastFetchedTimestampRef.current;
-    if (Object.keys(quotes).length === 0 || elapsed >= pollingInterval * 1000) {
-      fetchQuotes(favorites);
+    // Initial fetch la prima rulare sau cand lista de simboluri s-a schimbat
+    const favoritesKey = favorites.join(',');
+    const favoritesChanged = favoritesKey !== prevFavoritesKeyRef.current;
+    prevFavoritesKeyRef.current = favoritesKey;
+
+    if (favorites.length === 0) {
+      setQuotes({});
+      setIsLoading(false);
+      setIsRefreshing(false);
+    } else {
+      const elapsed = Date.now() - lastFetchedTimestampRef.current;
+      if (favoritesChanged || Object.keys(quotes).length === 0 || elapsed >= pollingInterval * 1000) {
+        fetchQuotes(favorites);
+      }
     }
 
     // Interval countdown (la fiecare secunda)
@@ -203,7 +218,7 @@ export function useWatchlistPolling(
 
     // Interval fetch principal
     timerRef.current = setInterval(() => {
-      if (isBackgroundedRef.current || !isActive) return;
+      if (isBackgroundedRef.current || !isActive || favorites.length === 0) return;
       fetchQuotes(favorites);
     }, pollingInterval * 1000);
 
@@ -266,7 +281,6 @@ export function useWatchlistPolling(
     setPollingInterval,
     favorites,
     setFavorites,
-    allSymbols,
     selectedSymbol,
     setSelectedSymbol,
     quotes,

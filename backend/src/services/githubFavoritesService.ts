@@ -41,10 +41,23 @@ function generateListId(name: string): string {
     .substring(0, 48) + '-' + Date.now().toString(36);
 }
 
+function normalizeSymbols(symbols: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of symbols) {
+    if (typeof raw !== 'string') continue;
+    const clean = raw.trim().toUpperCase();
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    result.push(clean);
+  }
+  return result;
+}
+
 // ─── Core: Read from GitHub ───
 
-async function readListsFile(): Promise<{ data: FavoriteListsFile; sha: string }> {
-  if (isCacheValid()) {
+async function readListsFile(forceRefresh = false): Promise<{ data: FavoriteListsFile; sha: string }> {
+  if (!forceRefresh && isCacheValid()) {
     return { data: cache!.data, sha: cache!.sha };
   }
 
@@ -128,8 +141,8 @@ async function writeListsFile(
 /**
  * Returns all favorite lists.
  */
-export async function getAllLists(): Promise<FavoriteListsFile> {
-  const { data } = await readListsFile();
+export async function getAllLists(forceRefresh = false): Promise<FavoriteListsFile> {
+  const { data } = await readListsFile(forceRefresh);
   return data;
 }
 
@@ -158,7 +171,7 @@ export async function createList(params: {
     name: params.name,
     icon: params.icon,
     color: params.color,
-    symbols: params.symbols || [],
+    symbols: normalizeSymbols(params.symbols || []),
     createdAt: now,
     updatedAt: now,
   };
@@ -192,7 +205,7 @@ export async function updateList(
   if (patch.name !== undefined) list.name = patch.name;
   if (patch.icon !== undefined) list.icon = patch.icon;
   if (patch.color !== undefined) list.color = patch.color;
-  if (patch.symbols !== undefined) list.symbols = patch.symbols;
+  if (patch.symbols !== undefined) list.symbols = normalizeSymbols(patch.symbols);
   list.updatedAt = new Date().toISOString();
 
   data.lists[index] = list;
@@ -237,17 +250,12 @@ export async function addSymbolsToList(listId: string, symbols: string[]): Promi
   }
 
   const list = data.lists[index];
-  const existing = new Set(list.symbols);
-  for (const sym of symbols) {
-    if (!existing.has(sym)) {
-      list.symbols.push(sym);
-      existing.add(sym);
-    }
-  }
+  const normalizedIncoming = normalizeSymbols(symbols);
+  list.symbols = normalizeSymbols([...list.symbols, ...normalizedIncoming]);
   list.updatedAt = new Date().toISOString();
 
   data.lists[index] = list;
-  await writeListsFile(data, sha, `Add symbols to ${list.name}: ${symbols.join(', ')}`);
+  await writeListsFile(data, sha, `Add symbols to ${list.name}: ${normalizedIncoming.join(', ')}`);
   return list;
 }
 
@@ -263,12 +271,13 @@ export async function removeSymbolsFromList(listId: string, symbols: string[]): 
   }
 
   const list = data.lists[index];
-  const toRemove = new Set(symbols);
-  list.symbols = list.symbols.filter((s) => !toRemove.has(s));
+  const normalizedToRemove = normalizeSymbols(symbols);
+  const toRemove = new Set(normalizedToRemove);
+  list.symbols = list.symbols.filter((s) => !toRemove.has(s.trim().toUpperCase()));
   list.updatedAt = new Date().toISOString();
 
   data.lists[index] = list;
-  await writeListsFile(data, sha, `Remove symbols from ${list.name}: ${symbols.join(', ')}`);
+  await writeListsFile(data, sha, `Remove symbols from ${list.name}: ${normalizedToRemove.join(', ')}`);
   return list;
 }
 

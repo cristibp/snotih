@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   LayoutChangeEvent,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -21,7 +23,7 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { fetchWatchlistHistory } from '../api/client';
-import { CandlePoint, MarketQuote } from '../api/types';
+import { CandlePoint, FavoriteList, MarketQuote } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
 
 const PINNED_STORAGE_KEY = '@watchlist_bloomberg_pinned';
@@ -63,6 +65,10 @@ interface FavoritesBloombergGridProps {
   onSelectSymbol: (symbol: string) => void;
   listId?: string;
   onRefreshSymbol?: (symbol: string) => Promise<void> | void;
+  onRemoveSymbol?: (symbol: string) => Promise<void> | void;
+  onOpenAddModal?: (initialQuery?: string) => void;
+  allLists?: FavoriteList[];
+  onSwitchListAndSelect?: (listId: string, symbol: string) => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   isKiosk?: boolean;
@@ -116,6 +122,10 @@ export default function FavoritesBloombergGrid({
   onSelectSymbol,
   listId,
   onRefreshSymbol,
+  onRemoveSymbol,
+  onOpenAddModal,
+  allLists,
+  onSwitchListAndSelect,
   isSidebarCollapsed = false,
   onToggleSidebar,
   isKiosk = false,
@@ -132,6 +142,11 @@ export default function FavoritesBloombergGrid({
   const [hoverData, setHoverData] = useState<Record<string, HoverPointState | null>>({});
   const [pinnedByList, setPinnedByList] = useState<Record<string, string[]>>(readInitialPinnedMap);
   const [refreshingSymbols, setRefreshingSymbols] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [confirmRemoveSymbol, setConfirmRemoveSymbol] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState<boolean>(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const hasUserToggledPinRef = useRef(false);
   const isMountedRef = useRef(true);
   const chartWrapperRefs = useRef<Record<string, View | null>>({});
@@ -175,6 +190,30 @@ export default function FavoritesBloombergGrid({
     return [...pinnedFirst, ...rest];
   }, [favorites, pinnedSymbols]);
 
+  const trimmedSearch = searchQuery.trim().toUpperCase();
+
+  const displayedFavorites = useMemo(() => {
+    if (!trimmedSearch) return orderedFavorites;
+    return orderedFavorites.filter((sym) => {
+      const name = quotes[sym]?.name || '';
+      return sym.toUpperCase().includes(trimmedSearch) || name.toUpperCase().includes(trimmedSearch);
+    });
+  }, [orderedFavorites, quotes, trimmedSearch]);
+
+  const otherListMatches = useMemo(() => {
+    if (!trimmedSearch || !allLists || allLists.length === 0) return [];
+    const matches: { list: FavoriteList; symbol: string }[] = [];
+    allLists.forEach((list) => {
+      if (list.id === listId) return;
+      (list.symbols || []).forEach((sym) => {
+        if (sym.toUpperCase().includes(trimmedSearch)) {
+          matches.push({ list, symbol: sym });
+        }
+      });
+    });
+    return matches.slice(0, 12);
+  }, [trimmedSearch, allLists, listId]);
+
   const togglePin = useCallback(
     (symbol: string) => {
       hasUserToggledPinRef.current = true;
@@ -190,6 +229,37 @@ export default function FavoritesBloombergGrid({
     },
     [effectiveListKey]
   );
+
+  const handleConfirmRemove = useCallback(async () => {
+    if (!confirmRemoveSymbol || !onRemoveSymbol || isRemoving) return;
+    const target = confirmRemoveSymbol;
+    setIsRemoving(true);
+    setRemoveError(null);
+    try {
+      await onRemoveSymbol(target);
+      setPinnedByList((prev) => {
+        const current = prev[effectiveListKey] || [];
+        if (!current.includes(target)) return prev;
+        const next = {
+          ...prev,
+          [effectiveListKey]: current.filter((s) => s !== target),
+        };
+        persistPinnedMap(next);
+        return next;
+      });
+      if (isMountedRef.current) {
+        setConfirmRemoveSymbol(null);
+      }
+    } catch (err: any) {
+      if (isMountedRef.current) {
+        setRemoveError(err?.message || 'Nu s-a putut elimina simbolul din GitHub.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsRemoving(false);
+      }
+    }
+  }, [confirmRemoveSymbol, effectiveListKey, isRemoving, onRemoveSymbol]);
 
   const handleRefreshSymbol = useCallback(
     async (symbol: string) => {
@@ -295,11 +365,11 @@ export default function FavoritesBloombergGrid({
   // In tableta extinsa / landscape (680 - 1050px), 3 coloane
   // In ecran mare / desktop (> 1050px), 4 coloane
   const numColumns =
-    gridWidth > 1050 && favorites.length >= 4
+    gridWidth > 1050 && displayedFavorites.length >= 4
       ? 4
-      : gridWidth > 680 && favorites.length >= 3
+      : gridWidth > 680 && displayedFavorites.length >= 3
       ? 3
-      : gridWidth >= 460 && favorites.length >= 2
+      : gridWidth >= 460 && displayedFavorites.length >= 2
       ? 2
       : 1;
   const cardGap = isKiosk ? 10 : 8;
@@ -543,6 +613,29 @@ export default function FavoritesBloombergGrid({
             >
               <Text style={styles.zoomBtnText}>🔍</Text>
             </TouchableOpacity>
+
+            {onRemoveSymbol && (
+              <TouchableOpacity
+                style={[
+                  styles.removeTileBtn,
+                  {
+                    backgroundColor: isBlack
+                      ? 'rgba(239, 68, 68, 0.2)'
+                      : 'rgba(239, 68, 68, 0.12)',
+                  },
+                ]}
+                onPress={() => {
+                  setRemoveError(null);
+                  setConfirmRemoveSymbol(symbol);
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Elimină ${symbol} din watchlist`}
+              >
+                <Text style={styles.removeTileBtnText}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -847,6 +940,50 @@ export default function FavoritesBloombergGrid({
             })}
           </View>
 
+          {/* Search toggle & Add Symbol shortcuts */}
+          {!isKiosk && (
+            <TouchableOpacity
+              style={[
+                styles.headerActionBtn,
+                (isSearchOpen || searchQuery.trim().length > 0)
+                  ? { backgroundColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#3B82F6' }
+                  : {
+                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                      borderColor: colors.cardBorder,
+                    },
+              ]}
+              onPress={() => {
+                if (isSearchOpen && searchQuery) {
+                  setSearchQuery('');
+                }
+                setIsSearchOpen((prev) => !prev);
+              }}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Caută simboluri în watchlist-uri"
+            >
+              <Text style={[styles.headerActionBtnText, { color: colors.text }]}>🔍</Text>
+            </TouchableOpacity>
+          )}
+
+          {!isKiosk && onOpenAddModal && (
+            <TouchableOpacity
+              style={[
+                styles.headerAddBtn,
+                {
+                  backgroundColor: isBlack ? 'rgba(59, 130, 246, 0.18)' : '#EFF6FF',
+                  borderColor: '#3B82F6',
+                },
+              ]}
+              onPress={() => onOpenAddModal(searchQuery.trim())}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Adaugă simbol în watchlist"
+            >
+              <Text style={styles.headerAddBtnText}>+ Simbol</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Kiosk Mode Toggle */}
           {onToggleKiosk && (
             <TouchableOpacity
@@ -898,12 +1035,101 @@ export default function FavoritesBloombergGrid({
         </View>
       </View>
 
+      {/* Search bar across watchlists (collapsible in Bloomberg header) */}
+      {!isKiosk && (isSearchOpen || searchQuery.trim().length > 0) && (
+        <View style={styles.searchSection}>
+          <View
+            style={[
+              styles.searchInputRow,
+              {
+                backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+                borderColor: colors.cardBorder,
+              },
+            ]}
+          >
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Caută simbol existent în watchlist-uri..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="characters"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                style={styles.searchClearBtn}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Text style={[styles.searchClearText, { color: colors.textMuted }]}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {otherListMatches.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.otherMatchesRow}
+            >
+              <Text style={[styles.otherMatchesLabel, { color: colors.textMuted }]}>
+                Alte liste:
+              </Text>
+              {otherListMatches.map(({ list, symbol }) => (
+                <TouchableOpacity
+                  key={`${list.id}-${symbol}`}
+                  style={[
+                    styles.otherMatchChip,
+                    {
+                      backgroundColor: isBlack ? '#1E293B' : '#F8FAFC',
+                      borderColor: list.color || colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => onSwitchListAndSelect?.(list.id, symbol)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.otherMatchText, { color: colors.text }]}>
+                    {list.icon || '⭐'} {list.name}: <Text style={{ fontWeight: '800', color: '#3B82F6' }}>{symbol}</Text>
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       {/* Grid of Mini Bloomberg Charts */}
       {favorites.length === 0 ? (
         <View style={styles.emptyGrid}>
           <Text style={[styles.emptyGridText, { color: colors.textMuted }]}>
-            Nu există simboluri favorite configurate. Folosește butonul ⚙️ pentru a adăuga.
+            Nu există simboluri în acest watchlist.
           </Text>
+          {onOpenAddModal && (
+            <TouchableOpacity
+              style={styles.emptyAddBtn}
+              onPress={() => onOpenAddModal('')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyAddBtnText}>+ Adaugă simbol în watchlist</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : displayedFavorites.length === 0 ? (
+        <View style={styles.emptyGrid}>
+          <Text style={[styles.emptyGridText, { color: colors.textMuted }]}>
+            Niciun simbol nu corespunde căutării „{searchQuery.trim()}” în lista activă.
+          </Text>
+          {onOpenAddModal && searchQuery.trim().length > 0 && (
+            <TouchableOpacity
+              style={styles.emptyAddBtn}
+              onPress={() => onOpenAddModal(searchQuery.trim())}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyAddBtnText}>
+                + Caută și adaugă „{searchQuery.trim().toUpperCase()}”
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <ScrollView
@@ -915,10 +1141,75 @@ export default function FavoritesBloombergGrid({
           showsVerticalScrollIndicator={true}
         >
           <View style={[styles.tilesGrid, { gap: cardGap }]}>
-            {orderedFavorites.map((sym) => renderBloombergTile(sym))}
+            {displayedFavorites.map((sym) => renderBloombergTile(sym))}
           </View>
         </ScrollView>
       )}
+
+      {/* Confirm Remove Symbol Dialog */}
+      <Modal
+        visible={confirmRemoveSymbol !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isRemoving) setConfirmRemoveSymbol(null);
+        }}
+      >
+        <View style={styles.confirmOverlay}>
+          <View
+            style={[
+              styles.confirmCard,
+              {
+                backgroundColor: isBlack ? '#0F172A' : '#FFFFFF',
+                borderColor: colors.cardBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>
+              Elimină simbolul din watchlist?
+            </Text>
+            <Text style={[styles.confirmBody, { color: colors.textMuted }]}>
+              Ești sigur că vrei să elimini{' '}
+              <Text style={{ fontWeight: '800', color: colors.text }}>
+                {confirmRemoveSymbol}
+              </Text>
+              {confirmRemoveSymbol && quotes[confirmRemoveSymbol]?.name
+                ? ` (${quotes[confirmRemoveSymbol].name})`
+                : ''}
+              {' '}din acest watchlist? Modificarea va fi salvată în GitHub.
+            </Text>
+
+            {removeError ? (
+              <Text style={styles.confirmErrorText}>{removeError}</Text>
+            ) : null}
+
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={[styles.confirmCancelBtn, { borderColor: colors.cardBorder }]}
+                onPress={() => setConfirmRemoveSymbol(null)}
+                disabled={isRemoving}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.confirmCancelText, { color: colors.textMuted }]}>
+                  Anulează
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmDeleteBtn, isRemoving && { opacity: 0.65 }]}
+                onPress={handleConfirmRemove}
+                disabled={isRemoving}
+                activeOpacity={0.8}
+              >
+                {isRemoving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmDeleteText}>Elimină</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1124,6 +1415,89 @@ const styles = StyleSheet.create({
   zoomBtnText: {
     fontSize: 9,
   },
+  removeTileBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeTileBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#EF4444',
+    lineHeight: 12,
+  },
+  headerActionBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  headerAddBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAddBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#3B82F6',
+  },
+  searchSection: {
+    marginBottom: 6,
+    paddingHorizontal: 4,
+    gap: 5,
+  },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    height: 32,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 11,
+    paddingVertical: 2,
+  },
+  searchClearBtn: {
+    paddingLeft: 6,
+  },
+  searchClearText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  otherMatchesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 1,
+  },
+  otherMatchesLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  otherMatchChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  otherMatchText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
   tileName: {
     fontSize: 10,
     marginTop: 1,
@@ -1207,9 +1581,83 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    gap: 10,
   },
   emptyGridText: {
     fontSize: 12,
     textAlign: 'center',
+  },
+  emptyAddBtn: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  emptyAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  confirmBody: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  confirmErrorText: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 16,
+  },
+  confirmCancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  confirmCancelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  confirmDeleteBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  confirmDeleteText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

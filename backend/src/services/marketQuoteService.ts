@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { MarketQuote } from '../types';
+import { MarketQuote, WatchlistSymbolMeta } from '../types';
 import { watchlistConfig } from '../config/watchlistConfig';
 
 const HTTP_HEADERS = {
@@ -225,5 +225,104 @@ export async function getQuotesForSymbols(
   });
 
   await Promise.all(quotePromises);
+  return results;
+}
+
+interface SearchCacheEntry {
+  results: WatchlistSymbolMeta[];
+  cachedAt: number;
+}
+
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const searchMemoryCache = new Map<string, SearchCacheEntry>();
+
+export function resetSearchCache(): void {
+  searchMemoryCache.clear();
+}
+
+function mapQuoteCategory(quoteType?: string, typeDisp?: string): string {
+  switch ((quoteType || '').toUpperCase()) {
+    case 'EQUITY':
+      return 'Stock';
+    case 'ETF':
+      return 'ETF';
+    case 'INDEX':
+      return 'Index';
+    case 'FUTURE':
+      return 'Future';
+    case 'CRYPTOCURRENCY':
+      return 'Crypto';
+    case 'CURRENCY':
+      return 'Forex';
+    default:
+      return typeDisp || 'Asset';
+  }
+}
+
+/**
+ * Cauta simboluri bursiere (actiuni, ETF-uri, indici) prin Yahoo Finance cu fallback Finnhub.
+ */
+export async function searchMarketSymbols(query: string): Promise<WatchlistSymbolMeta[]> {
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return [];
+
+  const cacheKey = cleanQuery.toUpperCase();
+  const cached = searchMemoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < SEARCH_CACHE_TTL_MS) {
+    return cached.results;
+  }
+
+  const deduped = new Map<string, WatchlistSymbolMeta>();
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(cleanQuery)}&quotesCount=15&newsCount=0`;
+    const res = await axios.get(url, {
+      timeout: watchlistConfig.httpTimeoutMs,
+      headers: HTTP_HEADERS,
+    });
+
+    const quotes = Array.isArray(res.data?.quotes) ? res.data.quotes : [];
+    for (const item of quotes) {
+      if (!item || typeof item.symbol !== 'string') continue;
+      const sym = item.symbol.trim().toUpperCase();
+      if (!sym || deduped.has(sym)) continue;
+      deduped.set(sym, {
+        symbol: sym,
+        name: item.shortname || item.longname || sym,
+        exchange: item.exchDisp || item.exchange || undefined,
+        category: mapQuoteCategory(item.quoteType, item.typeDisp),
+      });
+    }
+  } catch {
+    // Fallback to Finnhub below if configured
+  }
+
+  if (deduped.size === 0 && watchlistConfig.finnhubApiKey) {
+    try {
+      const url = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(cleanQuery)}&token=${encodeURIComponent(watchlistConfig.finnhubApiKey)}`;
+      const res = await axios.get(url, {
+        timeout: watchlistConfig.httpTimeoutMs,
+        headers: HTTP_HEADERS,
+      });
+      const items = Array.isArray(res.data?.result) ? res.data.result : [];
+      for (const item of items.slice(0, 15)) {
+        if (!item || typeof item.symbol !== 'string') continue;
+        const sym = item.symbol.trim().toUpperCase();
+        if (!sym || deduped.has(sym)) continue;
+        deduped.set(sym, {
+          symbol: sym,
+          name: item.description || sym,
+          category: mapQuoteCategory(item.type),
+        });
+      }
+    } catch {
+      // Return empty results cleanly if offline/rate-limited
+    }
+  }
+
+  const results = Array.from(deduped.values());
+  if (results.length > 0) {
+    searchMemoryCache.set(cacheKey, { results, cachedAt: Date.now() });
+  }
   return results;
 }

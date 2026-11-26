@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -37,6 +38,8 @@ export default function WatchlistScreen({
   const { colors, isBlack } = useTheme();
   const { isPhone, isLandscape, isAllview, width } = useDevice();
   const [setupModalVisible, setSetupModalVisible] = useState<boolean>(false);
+  const [setupInitialQuery, setSetupInitialQuery] = useState<string>('');
+  const [sidebarSearch, setSidebarSearch] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('detail');
   const [mobileSubMode, setMobileSubMode] = useState<MobileSubMode>('chart');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -71,6 +74,7 @@ export default function WatchlistScreen({
     updateListMeta,
     deleteListById,
     setDefault,
+    removeSymbols,
     setSymbols: setListSymbols,
     switchList,
     isLoading: listsLoading,
@@ -84,7 +88,6 @@ export default function WatchlistScreen({
     pollingInterval,
     setPollingInterval,
     favorites,
-    allSymbols,
     selectedSymbol,
     setSelectedSymbol,
     quotes,
@@ -96,10 +99,48 @@ export default function WatchlistScreen({
     refreshSymbol,
   } = useWatchlistPolling(isActive, activeSymbols);
 
-  // Wrapper to save favorites through the multi-list system
-  const handleSaveFavorites = (newFavs: string[]) => {
-    setListSymbols(newFavs);
+  const openSetupModal = (initialQuery: string = '') => {
+    setSetupInitialQuery(initialQuery);
+    setSetupModalVisible(true);
   };
+
+  // Wrapper to save favorites through the multi-list system
+  const handleSaveFavorites = async (newFavs: string[]) => {
+    await setListSymbols(newFavs);
+  };
+
+  const trimmedSidebarSearch = sidebarSearch.trim().toUpperCase();
+
+  const filteredFavorites = useMemo(() => {
+    if (!trimmedSidebarSearch) return favorites;
+    return favorites.filter((sym) => {
+      const name = quotes[sym]?.name || '';
+      return (
+        sym.toUpperCase().includes(trimmedSidebarSearch) ||
+        name.toUpperCase().includes(trimmedSidebarSearch)
+      );
+    });
+  }, [favorites, quotes, trimmedSidebarSearch]);
+
+  const otherWatchlistMatches = useMemo(() => {
+    if (!trimmedSidebarSearch) return [];
+    const matches: { listId: string; listName: string; listIcon: string; listColor?: string; symbol: string }[] = [];
+    allLists.forEach((list) => {
+      if (list.id === activeListId) return;
+      (list.symbols || []).forEach((sym) => {
+        if (sym.toUpperCase().includes(trimmedSidebarSearch)) {
+          matches.push({
+            listId: list.id,
+            listName: list.name,
+            listIcon: list.icon || '⭐',
+            listColor: list.color,
+            symbol: sym,
+          });
+        }
+      });
+    });
+    return matches.slice(0, 10);
+  }, [allLists, activeListId, trimmedSidebarSearch]);
 
   const handleSelectFavoriteCard = (sym: string) => {
     setSelectedSymbol(sym);
@@ -176,7 +217,7 @@ export default function WatchlistScreen({
                   borderColor: colors.cardBorder,
                 },
               ]}
-              onPress={() => setSetupModalVisible(true)}
+              onPress={() => openSetupModal()}
               activeOpacity={0.7}
               accessibilityLabel="Configurare simboluri favorite"
             >
@@ -311,7 +352,7 @@ export default function WatchlistScreen({
                     styles.mobileAddChip,
                     { borderColor: colors.cardBorder, backgroundColor: isBlack ? '#0F172A' : colors.card },
                   ]}
-                  onPress={() => setSetupModalVisible(true)}
+                  onPress={() => openSetupModal()}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.mobileAddChipText, { color: colors.textMuted }]}>+ Simbol</Text>
@@ -341,6 +382,13 @@ export default function WatchlistScreen({
               quotes={quotes}
               listId={activeList?.id || activeListId}
               onRefreshSymbol={refreshSymbol}
+              onRemoveSymbol={(sym) => removeSymbols([sym])}
+              onOpenAddModal={(q) => openSetupModal(q || '')}
+              allLists={allLists}
+              onSwitchListAndSelect={(listId, sym) => {
+                switchList(listId);
+                setSelectedSymbol(sym);
+              }}
               onSelectSymbol={(sym) => {
                 setSelectedSymbol(sym);
                 setViewMode('detail');
@@ -364,19 +412,46 @@ export default function WatchlistScreen({
               contentContainerStyle={styles.mobileCardsContent}
               showsVerticalScrollIndicator={true}
             >
+              <View
+                style={[
+                  styles.sidebarSearchBox,
+                  {
+                    backgroundColor: isBlack ? '#0F172A' : '#F1F5F9',
+                    borderColor: colors.cardBorder,
+                    marginBottom: 8,
+                  },
+                ]}
+              >
+                <TextInput
+                  style={[styles.sidebarSearchInput, { color: colors.text }]}
+                  value={sidebarSearch}
+                  onChangeText={setSidebarSearch}
+                  placeholder="🔍 Caută în watchlist-uri..."
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                />
+                {sidebarSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setSidebarSearch('')} style={styles.sidebarSearchClear}>
+                    <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {listsLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color={colors.textMuted} />
                   <Text style={[styles.loadingText, { color: colors.textMuted }]}>Se încarcă listele...</Text>
                 </View>
-              ) : favorites.length === 0 ? (
+              ) : filteredFavorites.length === 0 ? (
                 <View style={styles.emptyChartState}>
                   <Text style={[styles.emptyChartText, { color: colors.textMuted }]}>
-                    Niciun simbol în această listă. Adaugă simboluri folosind butonul de mai jos.
+                    {trimmedSidebarSearch
+                      ? `Niciun simbol găsit pentru „${sidebarSearch.trim()}” în lista activă.`
+                      : 'Niciun simbol în această listă. Adaugă simboluri folosind butonul de mai jos.'}
                   </Text>
                 </View>
               ) : (
-                favorites.map((sym) => (
+                filteredFavorites.map((sym) => (
                   <FavoriteCard
                     key={sym}
                     symbol={sym}
@@ -387,12 +462,43 @@ export default function WatchlistScreen({
                 ))
               )}
 
+              {otherWatchlistMatches.length > 0 && (
+                <View style={styles.otherMatchesBox}>
+                  <Text style={[styles.otherMatchesTitle, { color: colors.textMuted }]}>
+                    În alte watchlist-uri:
+                  </Text>
+                  {otherWatchlistMatches.map((m) => (
+                    <TouchableOpacity
+                      key={`${m.listId}-${m.symbol}`}
+                      style={[
+                        styles.otherMatchRow,
+                        { backgroundColor: isBlack ? '#0F172A' : colors.card, borderColor: m.listColor || colors.cardBorder },
+                      ]}
+                      onPress={() => {
+                        switchList(m.listId);
+                        handleSelectFavoriteCard(m.symbol);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.otherMatchSymbol, { color: '#3B82F6' }]}>{m.symbol}</Text>
+                      <Text style={[styles.otherMatchListName, { color: colors.textMuted }]}>
+                        {m.listIcon} {m.listName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
               <TouchableOpacity
                 style={[styles.addFavBtn, { borderColor: colors.cardBorder, marginTop: 8 }]}
-                onPress={() => setSetupModalVisible(true)}
+                onPress={() => openSetupModal(sidebarSearch.trim())}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.addFavText, { color: colors.textMuted }]}>+ Adaugă simbol în listă</Text>
+                <Text style={[styles.addFavText, { color: colors.textMuted }]}>
+                  {trimmedSidebarSearch
+                    ? `+ Adaugă „${trimmedSidebarSearch}” ca acțiune nouă`
+                    : '+ Adaugă simbol în listă'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           ) : selectedSymbol ? (
@@ -432,8 +538,9 @@ export default function WatchlistScreen({
         {/* Setup Modal */}
         <FavoritesSetupModal
           visible={setupModalVisible}
-          allSymbols={allSymbols}
           currentFavorites={favorites}
+          quotes={quotes}
+          initialSearchQuery={setupInitialQuery}
           onSaveFavorites={handleSaveFavorites}
           onClose={() => setSetupModalVisible(false)}
           allLists={allLists}
@@ -508,7 +615,7 @@ export default function WatchlistScreen({
                       borderColor: colors.cardBorder,
                     },
                   ]}
-                  onPress={() => setSetupModalVisible(true)}
+                  onPress={() => openSetupModal()}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel="Deschide configurarea simbolurilor favorite"
@@ -516,6 +623,31 @@ export default function WatchlistScreen({
                   <Text style={styles.setupIconText}>⚙️</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* Search existing symbols across GitHub watchlists */}
+            <View
+              style={[
+                styles.sidebarSearchBox,
+                {
+                  backgroundColor: isBlack ? '#0F172A' : '#F1F5F9',
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <TextInput
+                style={[styles.sidebarSearchInput, { color: colors.text }]}
+                value={sidebarSearch}
+                onChangeText={setSidebarSearch}
+                placeholder="🔍 Caută în watchlist-uri..."
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+              />
+              {sidebarSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setSidebarSearch('')} style={styles.sidebarSearchClear}>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>✕</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Loading state for lists */}
@@ -530,15 +662,50 @@ export default function WatchlistScreen({
                 contentContainerStyle={styles.cardsContainer}
                 showsVerticalScrollIndicator={false}
               >
-                {favorites.map((sym) => (
-                  <FavoriteCard
-                    key={sym}
-                    symbol={sym}
-                    quote={quotes[sym]}
-                    isSelected={sym === selectedSymbol}
-                    onSelect={setSelectedSymbol}
-                  />
-                ))}
+                {filteredFavorites.length === 0 ? (
+                  <Text style={[styles.emptyFilterText, { color: colors.textMuted }]}>
+                    {trimmedSidebarSearch
+                      ? `Nimic găsit pentru „${sidebarSearch.trim()}” în lista activă.`
+                      : 'Lista este goală.'}
+                  </Text>
+                ) : (
+                  filteredFavorites.map((sym) => (
+                    <FavoriteCard
+                      key={sym}
+                      symbol={sym}
+                      quote={quotes[sym]}
+                      isSelected={sym === selectedSymbol}
+                      onSelect={setSelectedSymbol}
+                    />
+                  ))
+                )}
+
+                {otherWatchlistMatches.length > 0 && (
+                  <View style={styles.otherMatchesBox}>
+                    <Text style={[styles.otherMatchesTitle, { color: colors.textMuted }]}>
+                      În alte liste:
+                    </Text>
+                    {otherWatchlistMatches.map((m) => (
+                      <TouchableOpacity
+                        key={`${m.listId}-${m.symbol}`}
+                        style={[
+                          styles.otherMatchRow,
+                          { backgroundColor: isBlack ? '#0F172A' : colors.card, borderColor: m.listColor || colors.cardBorder },
+                        ]}
+                        onPress={() => {
+                          switchList(m.listId);
+                          setSelectedSymbol(m.symbol);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.otherMatchSymbol, { color: '#3B82F6' }]}>{m.symbol}</Text>
+                        <Text style={[styles.otherMatchListName, { color: colors.textMuted }]} numberOfLines={1}>
+                          {m.listIcon} {m.listName}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
             )}
 
@@ -550,10 +717,14 @@ export default function WatchlistScreen({
                   borderColor: colors.cardBorder,
                 },
               ]}
-              onPress={() => setSetupModalVisible(true)}
+              onPress={() => openSetupModal(sidebarSearch.trim())}
               activeOpacity={0.7}
             >
-              <Text style={[styles.addFavText, { color: colors.textMuted }]}>+ Adaugă simbol</Text>
+              <Text style={[styles.addFavText, { color: colors.textMuted }]}>
+                {trimmedSidebarSearch
+                  ? `+ Adaugă „${trimmedSidebarSearch}”`
+                  : '+ Adaugă simbol'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -656,6 +827,13 @@ export default function WatchlistScreen({
               quotes={quotes}
               listId={activeList?.id || activeListId}
               onRefreshSymbol={refreshSymbol}
+              onRemoveSymbol={(sym) => removeSymbols([sym])}
+              onOpenAddModal={(q) => openSetupModal(q || '')}
+              allLists={allLists}
+              onSwitchListAndSelect={(listId, sym) => {
+                switchList(listId);
+                setSelectedSymbol(sym);
+              }}
               onSelectSymbol={(sym) => {
                 setSelectedSymbol(sym);
                 setViewMode('detail');
@@ -693,8 +871,9 @@ export default function WatchlistScreen({
       {/* Favorites Setup Modal */}
       <FavoritesSetupModal
         visible={setupModalVisible}
-        allSymbols={allSymbols}
         currentFavorites={favorites}
+        quotes={quotes}
+        initialSearchQuery={setupInitialQuery}
         onSaveFavorites={handleSaveFavorites}
         onClose={() => setSetupModalVisible(false)}
         allLists={allLists}
@@ -763,6 +942,55 @@ const styles = StyleSheet.create({
   },
   cardsContainer: {
     paddingBottom: 4,
+  },
+  sidebarSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    height: 30,
+    marginBottom: 4,
+  },
+  sidebarSearchInput: {
+    flex: 1,
+    fontSize: 11,
+    paddingVertical: 2,
+  },
+  sidebarSearchClear: {
+    paddingLeft: 6,
+  },
+  emptyFilterText: {
+    fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 14,
+  },
+  otherMatchesBox: {
+    marginTop: 6,
+    gap: 4,
+  },
+  otherMatchesTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  otherMatchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: 6,
+  },
+  otherMatchSymbol: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  otherMatchListName: {
+    fontSize: 10,
+    flexShrink: 1,
   },
   addFavBtn: {
     height: 34,

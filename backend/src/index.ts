@@ -40,7 +40,7 @@ import { computeRonEurIntradayAverage, getBucharestDateTime } from './services/i
 import { fetchMoneyMarketData } from './services/moneyMarketService';
 import { getYieldCurveStatus } from './services/macroService';
 import { loadWatchlistSymbols } from './services/watchlistCsvLoader';
-import { getQuotesForSymbols } from './services/marketQuoteService';
+import { getQuotesForSymbols, searchMarketSymbols } from './services/marketQuoteService';
 import { fetchWatchlistCandles } from './services/marketHistoryService';
 import {
   evaluateGlobalSignals,
@@ -1140,6 +1140,28 @@ app.get('/api/watchlist/symbols', (_req, res) => {
 });
 
 /**
+ * GET /api/watchlist/search?q=AAPL
+ * Cauta actiuni, ETF-uri si indici online (Yahoo Finance / Finnhub) pentru adaugare in watchlist.
+ */
+app.get('/api/watchlist/search', async (req, res) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const symbols = await searchMarketSymbols(q);
+    return res.json({
+      query: q.trim(),
+      symbols,
+      count: symbols.length,
+    });
+  } catch (err: any) {
+    console.error('Eroare la /api/watchlist/search:', err);
+    return res.status(500).json({
+      error: 'Eroare la cautarea simbolurilor.',
+      message: err?.message || String(err),
+    });
+  }
+});
+
+/**
  * GET /api/watchlist/quotes
  * Query: ?symbols=EMIM.AS,VWCE.DE,AAPL
  * Returneaza cotatiile curente cu Finnhub primary + Yahoo fallback + server-side caching.
@@ -1295,9 +1317,10 @@ app.get('/api/cron/global-signals', async (req, res) => {
  * GET /api/favorites/lists
  * Returns all favorite lists from the GitHub repo.
  */
-app.get('/api/favorites/lists', async (_req, res) => {
+app.get('/api/favorites/lists', async (req, res) => {
   try {
-    const data = await getAllLists();
+    const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
+    const data = await getAllLists(forceRefresh);
     return res.json(data);
   } catch (err: any) {
     console.error('Eroare la /api/favorites/lists:', err);
