@@ -22,7 +22,7 @@ import Svg, {
 import { fetchWatchlistHistory } from '../api/client';
 import { CandlePoint, MarketQuote, WatchlistVolumeSummary } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
-import WatchlistVolumeMetrics from './WatchlistVolumeMetrics';
+import WatchlistVolumeMetrics, { formatVolume } from './WatchlistVolumeMetrics';
 
 interface WatchlistChartProps {
   symbol: string;
@@ -125,7 +125,9 @@ export default function WatchlistChart({
     : containerHeight > 340
     ? Math.max(200, Math.min(containerHeight - (isCompactWidth ? 150 : 115), 450))
     : 210;
-  const chartHeight = Math.max(130, baseChartHeight - (selectedTf === '1D' || selectedTf === '5D' ? 78 : 0));
+  const chartHeight = selectedTf === '1Y'
+    ? Math.max(170, Math.min(baseChartHeight, containerHeight - (isCompactWidth ? 170 : 125)))
+    : Math.max(130, baseChartHeight - (selectedTf === '1D' || selectedTf === '5D' ? 78 : 0));
 
   const currentFavIndex = favorites ? favorites.indexOf(symbol) : -1;
   const hasFavNavigation = Boolean(favorites && favorites.length > 1 && onSelectSymbol);
@@ -186,7 +188,14 @@ export default function WatchlistChart({
   const paddingBottom = 24;
   const svgWidth = Math.max(containerWidth - 24, 100);
   const plotWidth = Math.max(svgWidth - paddingLeft - paddingRight, 100);
-  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom, 50);
+  const showYearlyVolume = selectedTf === '1Y';
+  const volumeSectionHeight = showYearlyVolume ? 80 : 0;
+  const plotHeight = Math.max(chartHeight - paddingTop - paddingBottom - volumeSectionHeight, 50);
+  const volumePlotTop = paddingTop + plotHeight + paddingBottom + 20;
+  const volumePlotHeight = 54;
+  const maxVolume = useMemo(() => Math.max(0, ...candles.map((candle) => (
+    Number.isFinite(candle.volume) && candle.volume > 0 ? candle.volume : 0
+  ))), [candles]);
 
   const { points, minVal, maxVal, isUpTrend, svgLinePath, svgAreaPath } = useMemo(() => {
     if (!candles || candles.length < 2) {
@@ -282,6 +291,9 @@ export default function WatchlistChart({
   };
 
   const activePoint = touchIndex !== null && points[touchIndex] ? points[touchIndex] : null;
+  const volumeCandle = activePoint?.candle ?? candles[candles.length - 1];
+  const selectedVolume = volumeCandle && Number.isFinite(volumeCandle.volume) && volumeCandle.volume >= 0
+    ? volumeCandle.volume : null;
 
   // Calcul pret si variatii curente sau la atingere
   const firstCandleClose = candles.length > 0 ? candles[0].close : 0;
@@ -679,6 +691,77 @@ export default function WatchlistChart({
               );
             })}
 
+            {/* Daily volume bars share the price chart's dates and hover selection in 1Y. */}
+            {showYearlyVolume && (
+              <G pointerEvents="none">
+                <SvgText
+                  x={paddingLeft}
+                  y={volumePlotTop - 8}
+                  fontSize="9"
+                  fontWeight="700"
+                  fill={colors.textMuted}
+                >
+                  {isCompactWidth ? 'Volum zilnic' : 'Volum zilnic · 1Y'}
+                </SvgText>
+                <SvgText
+                  x={paddingLeft + plotWidth}
+                  y={volumePlotTop - 8}
+                  fontSize="9"
+                  fontWeight="700"
+                  fill={colors.text}
+                  textAnchor="end"
+                >
+                  {volumeCandle ? `${formatTooltipTime(volumeCandle.timestamp, '1Y')} · ${selectedVolume === null ? '—' : selectedVolume.toLocaleString('ro-RO')}` : '—'}
+                </SvgText>
+                <Line
+                  x1={paddingLeft}
+                  y1={volumePlotTop + volumePlotHeight}
+                  x2={paddingLeft + plotWidth}
+                  y2={volumePlotTop + volumePlotHeight}
+                  stroke={colors.cardBorder}
+                />
+                <SvgText x={paddingLeft - 6} y={volumePlotTop + 7} fontSize="8" fill={colors.textMuted} textAnchor="end">
+                  {formatVolume(maxVolume)}
+                </SvgText>
+                {maxVolume > 0 ? points.map((pt, index) => {
+                  if (!Number.isFinite(pt.candle.volume) || pt.candle.volume <= 0) return null;
+                  const barWidth = Math.max(0.5, Math.min(8, (plotWidth / (points.length - 1)) * 0.75));
+                  const barHeight = Math.max(0.5, (pt.candle.volume / maxVolume) * volumePlotHeight);
+                  return (
+                    <Rect
+                      key={`volume-${pt.candle.timestamp}`}
+                      x={pt.x - barWidth / 2}
+                      y={volumePlotTop + volumePlotHeight - barHeight}
+                      width={barWidth}
+                      height={barHeight}
+                      fill={touchIndex === index ? (isBlack ? '#93C5FD' : '#1D4ED8') : '#3B82F6'}
+                      opacity={touchIndex === index ? 1 : 0.65}
+                    />
+                  );
+                }) : (
+                  <SvgText
+                    x={paddingLeft + plotWidth / 2}
+                    y={volumePlotTop + volumePlotHeight / 2}
+                    fontSize="10"
+                    fill={colors.textMuted}
+                    textAnchor="middle"
+                  >
+                    Fără volum raportat
+                  </SvgText>
+                )}
+                {activePoint && (
+                  <Line
+                    x1={activePoint.x}
+                    y1={volumePlotTop}
+                    x2={activePoint.x}
+                    y2={volumePlotTop + volumePlotHeight}
+                    stroke="#3B82F6"
+                    strokeDasharray="3,3"
+                  />
+                )}
+              </G>
+            )}
+
             {/* Zone interactive (hitboxes) la mouse over pe fiecare punct */}
             {points.map((pt, i) => {
               const colWidth = points.length > 1 ? Math.max(6, plotWidth / points.length) : plotWidth;
@@ -688,7 +771,7 @@ export default function WatchlistChart({
                   x={pt.x - colWidth / 2}
                   y={paddingTop}
                   width={colWidth}
-                  height={plotHeight}
+                  height={showYearlyVolume ? volumePlotTop + volumePlotHeight - paddingTop : plotHeight}
                   fill="transparent"
                   // @ts-ignore
                   pointerEvents="all"

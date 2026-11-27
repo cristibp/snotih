@@ -9,7 +9,7 @@ interface WatchlistVolumeMetricsProps {
   isLoading: boolean;
 }
 
-function formatVolume(volume: number | null): string {
+export function formatVolume(volume: number | null): string {
   if (volume === null) return '—';
   if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
   if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
