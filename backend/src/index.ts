@@ -42,6 +42,7 @@ import { getYieldCurveStatus } from './services/macroService';
 import { loadWatchlistSymbols } from './services/watchlistCsvLoader';
 import { getQuotesForSymbols, searchMarketSymbols } from './services/marketQuoteService';
 import { fetchWatchlistCandles } from './services/marketHistoryService';
+import { fetchWatchlistVolumeSummary } from './services/marketVolumeService';
 import {
   evaluateGlobalSignals,
   sendGlobalSignalsDiscordAlert,
@@ -1197,7 +1198,7 @@ app.get('/api/watchlist/quotes', async (req, res) => {
 
 /**
  * GET /api/watchlist/history/:symbol
- * Query: ?range=1d&interval=5m
+ * Query: ?range=1d&interval=5m&includeVolume=true
  * Returneaza lumanari/serii istorice pentru graficul activ.
  */
 app.get('/api/watchlist/history/:symbol', async (req, res) => {
@@ -1211,8 +1212,12 @@ app.get('/api/watchlist/history/:symbol', async (req, res) => {
     const interval = (req.query.interval as string) || '5m';
     const forceRefresh = req.query.refresh === 'true' || req.query.force === 'true';
 
-    const history = await fetchWatchlistCandles(symbol, range, interval, forceRefresh);
-    return res.json(history);
+    const includeVolume = req.query.includeVolume === 'true' && (range === '1d' || range === '5d');
+    const [history, volumeSummary] = await Promise.all([
+      fetchWatchlistCandles(symbol, range, interval, forceRefresh),
+      includeVolume ? fetchWatchlistVolumeSummary(symbol, forceRefresh) : Promise.resolve(undefined),
+    ]);
+    return res.json(includeVolume ? { ...history, volumeSummary } : history);
   } catch (err: any) {
     console.error(`Eroare la /api/watchlist/history/${req.params.symbol}:`, err);
     return res.status(500).json({

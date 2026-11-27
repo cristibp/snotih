@@ -20,8 +20,9 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { fetchWatchlistHistory } from '../api/client';
-import { CandlePoint, MarketQuote } from '../api/types';
+import { CandlePoint, MarketQuote, WatchlistVolumeSummary } from '../api/types';
 import { useTheme } from '../theme/ThemeContext';
+import WatchlistVolumeMetrics from './WatchlistVolumeMetrics';
 
 interface WatchlistChartProps {
   symbol: string;
@@ -56,29 +57,48 @@ export default function WatchlistChart({
   const { colors, isBlack } = useTheme();
   const [selectedTf, setSelectedTf] = useState<string>('1D');
   const [candles, setCandles] = useState<CandlePoint[]>([]);
+  const [volumeSummary, setVolumeSummary] = useState<WatchlistVolumeSummary | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [containerWidth, setContainerWidth] = useState<number>(500);
   const [containerHeight, setContainerHeight] = useState<number>(isKiosk ? 360 : 310);
   const [touchIndex, setTouchIndex] = useState<number | null>(null);
   const chartWrapperRef = useRef<View>(null);
+  const lastHistoryKeyRef = useRef<string | null>(null);
 
   const activeTfConfig = TIMEFRAMES.find((t) => t.label === selectedTf) || TIMEFRAMES[0];
 
-  // Fetch candle history cand se schimba simbolul sau timeframe-ul
+  // Refresh history and session volume when the symbol, timeframe or polled quote changes.
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    setTouchIndex(null);
+    const historyKey = `${symbol}_${activeTfConfig.range}_${activeTfConfig.interval}`;
+    const isRefresh = lastHistoryKeyRef.current === historyKey;
+    lastHistoryKeyRef.current = historyKey;
+    if (!isRefresh) {
+      setIsLoading(true);
+      setCandles([]);
+      setVolumeSummary(null);
+      setTouchIndex(null);
+    }
 
-    fetchWatchlistHistory(symbol, activeTfConfig.range, activeTfConfig.interval)
+    fetchWatchlistHistory(
+      symbol,
+      activeTfConfig.range,
+      activeTfConfig.interval,
+      isRefresh,
+      activeTfConfig.range === '1d' || activeTfConfig.range === '5d'
+    )
       .then((data) => {
         if (isMounted) {
           setCandles(data.candles || []);
+          setVolumeSummary(data.volumeSummary ?? null);
         }
       })
       .catch((err) => {
         console.warn(`Eroare la fetch candles pentru ${symbol}:`, err);
-        if (isMounted) setCandles([]);
+        if (isMounted) {
+          setCandles([]);
+          setVolumeSummary(null);
+        }
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -87,7 +107,7 @@ export default function WatchlistChart({
     return () => {
       isMounted = false;
     };
-  }, [symbol, activeTfConfig.range, activeTfConfig.interval]);
+  }, [symbol, activeTfConfig.range, activeTfConfig.interval, quote]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
@@ -100,11 +120,12 @@ export default function WatchlistChart({
   };
 
   const isCompactWidth = containerWidth < 460;
-  const chartHeight = isKiosk
+  const baseChartHeight = isKiosk
     ? Math.max(250, Math.min(containerHeight - (favorites && favorites.length > 1 ? 140 : 110), 520))
     : containerHeight > 340
     ? Math.max(200, Math.min(containerHeight - (isCompactWidth ? 150 : 115), 450))
     : 210;
+  const chartHeight = Math.max(130, baseChartHeight - (selectedTf === '1D' || selectedTf === '5D' ? 78 : 0));
 
   const currentFavIndex = favorites ? favorites.indexOf(symbol) : -1;
   const hasFavNavigation = Boolean(favorites && favorites.length > 1 && onSelectSymbol);
@@ -795,88 +816,70 @@ export default function WatchlistChart({
         )}
       </View>
 
-      {/* Footer Metrics Row: Day High, Day Low, Volume */}
-      <View style={[styles.footerRow, { borderTopColor: colors.cardBorder }]}>
-        <View
-          style={[
-            styles.metricItem,
-            {
-              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
-              borderColor: isBlack ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Minim Zi</Text>
-          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
-            {quote?.low ? quote.low.toFixed(2) : minVal.toFixed(2)}
-          </Text>
-        </View>
+      {/* Footer price metrics */}
+      <View>
+        <View style={[styles.footerRow, { borderTopColor: colors.cardBorder }]}>
+          <View
+            style={[
+              styles.metricItem,
+              {
+                backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+                borderColor: isBlack ? '#334155' : '#E2E8F0',
+              },
+            ]}
+          >
+            <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Minim Zi</Text>
+            <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
+              {quote?.low ? quote.low.toFixed(2) : minVal.toFixed(2)}
+            </Text>
+          </View>
 
-        <View
-          style={[
-            styles.metricItem,
-            {
-              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
-              borderColor: isBlack ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Maxim Zi</Text>
-          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
-            {quote?.high ? quote.high.toFixed(2) : maxVal.toFixed(2)}
-          </Text>
-        </View>
+          <View
+            style={[
+              styles.metricItem,
+              {
+                backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+                borderColor: isBlack ? '#334155' : '#E2E8F0',
+              },
+            ]}
+          >
+            <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Maxim Zi</Text>
+            <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
+              {quote?.high ? quote.high.toFixed(2) : maxVal.toFixed(2)}
+            </Text>
+          </View>
 
-        <View
-          style={[
-            styles.metricItem,
-            {
-              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
-              borderColor: isBlack ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Deschidere</Text>
-          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
-            {quote?.open ? quote.open.toFixed(2) : '-'}
-          </Text>
-        </View>
+          <View
+            style={[
+              styles.metricItem,
+              {
+                backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+                borderColor: isBlack ? '#334155' : '#E2E8F0',
+              },
+            ]}
+          >
+            <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Deschidere</Text>
+            <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
+              {quote?.open ? quote.open.toFixed(2) : '-'}
+            </Text>
+          </View>
 
-        <View
-          style={[
-            styles.metricItem,
-            {
-              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
-              borderColor: isBlack ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Închidere Prec.</Text>
-          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
-            {quote?.previousClose ? quote.previousClose.toFixed(2) : '-'}
-          </Text>
+          <View
+            style={[
+              styles.metricItem,
+              {
+                backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
+                borderColor: isBlack ? '#334155' : '#E2E8F0',
+              },
+            ]}
+          >
+            <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Închidere Prec.</Text>
+            <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
+              {quote?.previousClose ? quote.previousClose.toFixed(2) : '-'}
+            </Text>
+          </View>
         </View>
-
-        <View
-          style={[
-            styles.metricItem,
-            {
-              backgroundColor: isBlack ? '#1E293B' : '#F1F5F9',
-              borderColor: isBlack ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <Text style={[styles.metricLabel, { color: isBlack ? '#94A3B8' : '#475569' }]}>Volum Zi</Text>
-          <Text style={[styles.metricValue, { color: isBlack ? '#F8FAFC' : '#0F172A' }]}>
-            {quote?.price && candles.length > 0
-              ? candles[candles.length - 1].volume > 1000000
-                ? `${(candles[candles.length - 1].volume / 1000000).toFixed(1)}M`
-                : candles[candles.length - 1].volume > 1000
-                ? `${(candles[candles.length - 1].volume / 1000).toFixed(0)}k`
-                : `${candles[candles.length - 1].volume}`
-              : '-'}
-          </Text>
-        </View>
+        <WatchlistVolumeMetrics timeframe={selectedTf} summary={volumeSummary} isLoading={isLoading} />
       </View>
     </View>
   );

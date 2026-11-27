@@ -308,11 +308,13 @@ export async function fetchWatchlistHistory(
   symbol: string,
   range: string = '1d',
   interval: string = '5m',
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  includeVolume: boolean = false
 ): Promise<WatchlistHistoryResponse> {
   const refreshParam = forceRefresh ? '&refresh=true' : '';
+  const volumeParam = includeVolume ? '&includeVolume=true' : '';
   const response = await fetch(
-    `${API_BASE_URL}/api/watchlist/history/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}${refreshParam}`
+    `${API_BASE_URL}/api/watchlist/history/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}${refreshParam}${volumeParam}`
   );
   if (!response.ok) {
     throw new Error(`Nu s-au putut prelua datele istorice pentru ${symbol} (status ${response.status})`);

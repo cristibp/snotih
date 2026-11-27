@@ -310,6 +310,18 @@ export interface CandlePoint {
   volume: number;
 }
 
+export interface DailyVolumePoint {
+  date: string; // YYYY-MM-DD in the exchange timezone
+  volume: number | null;
+}
+
+export interface WatchlistVolumeSummary {
+  daily: DailyVolumePoint[];
+  currentDay: DailyVolumePoint;
+  /** Average of the five trading sessions before currentDay; null if incomplete. */
+  average5d: number | null;
+}
+
 export interface WatchlistHistoryResponse {
   symbol: string;
   currency: string;
@@ -317,6 +329,7 @@ export interface WatchlistHistoryResponse {
   interval: string;
   candles: CandlePoint[];
   previousClose?: number;
+  volumeSummary?: WatchlistVolumeSummary | null;
 }
 
 // ─── Global Market Signals (Futures & Forex Pre-Market) ───
