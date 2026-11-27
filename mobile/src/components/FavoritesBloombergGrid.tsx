@@ -459,6 +459,10 @@ export default function FavoritesBloombergGrid({
   // Render card individual Bloomberg
   const renderBloombergTile = (symbol: string) => {
     const quote = quotes[symbol];
+    const peRatio = quote?.peRatio;
+    const peLabel = typeof peRatio === 'number' && Number.isFinite(peRatio) && peRatio > 0
+      ? peRatio.toFixed(1)
+      : '—';
     const hist = histories[symbol];
     const candles = hist?.candles || [];
     const isLoadingCandles = hist?.isLoading ?? globalLoading;
@@ -616,25 +620,35 @@ export default function FavoritesBloombergGrid({
       >
         {/* Tile Header: Symbol, Name, Badges */}
         <View style={styles.tileHeader}>
-          <View style={styles.symbolRow}>
-            <Text style={[styles.symbolText, { color: colors.text }]} numberOfLines={1}>
-              {symbol}
-            </Text>
-            <View style={[styles.sourceBadge, { backgroundColor: sourceBadgeColor }]}>
-              <Text style={styles.sourceBadgeText}>{sourceBadge}</Text>
-            </View>
-            {formattedTime ? (
-              <Text
-                style={[
-                  styles.timeText,
-                  { color: hover ? '#3B82F6' : colors.textMuted },
-                  hover && styles.timeTextActive,
-                ]}
-                numberOfLines={1}
-              >
-                {formattedTime}
+          <View style={styles.tileIdentity}>
+            <View style={styles.symbolRow}>
+              <Text style={[styles.symbolText, { color: colors.text }]} numberOfLines={1}>
+                {symbol}
               </Text>
-            ) : null}
+              <Text
+                style={[styles.peText, { color: colors.textMuted }]}
+                accessibilityLabel={`P/E (ultimele 12 luni): ${peLabel === '—' ? 'indisponibil' : peLabel}${quote?.peRatioAsOf ? `, la ${quote.peRatioAsOf}` : ''}`}
+              >
+                P/E {peLabel}
+              </Text>
+            </View>
+            <View style={styles.quoteMetaRow}>
+              <View style={[styles.sourceBadge, { backgroundColor: sourceBadgeColor }]}>
+                <Text style={styles.sourceBadgeText}>{sourceBadge}</Text>
+              </View>
+              {formattedTime ? (
+                <Text
+                  style={[
+                    styles.timeText,
+                    { color: hover ? '#3B82F6' : colors.textMuted },
+                    hover && styles.timeTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {formattedTime}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.tileHeaderActions}>
@@ -1461,12 +1475,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  tileIdentity: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 4,
+  },
   symbolRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quoteMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flex: 1,
-    marginRight: 4,
+    marginTop: 3,
     overflow: 'hidden',
   },
   tileHeaderActions: {
@@ -1480,6 +1504,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
     flexShrink: 1,
+  },
+  peText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   sourceBadge: {
     paddingHorizontal: 3.5,

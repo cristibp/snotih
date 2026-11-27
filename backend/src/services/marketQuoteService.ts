@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { MarketQuote, WatchlistSymbolMeta } from '../types';
 import { watchlistConfig } from '../config/watchlistConfig';
+import { getPriceEarnings } from './marketFundamentalsService';
 
 const HTTP_HEADERS = {
   'User-Agent':
@@ -158,6 +159,7 @@ export async function getQuoteForSymbol(symbol: string, forceRefresh: boolean = 
 
   // 4. Daca am obtinut o cotatie valida, o salvam in cache
   if (quote) {
+    quote = { ...quote, ...await getPriceEarnings(cleanSym) };
     quoteMemoryCache.set(cleanSym, {
       quote,
       cachedAt: now,

@@ -13,6 +13,7 @@ const {
   fetchWatchlistCandles,
   resetHistoryCache,
 } = require('../dist/services/marketHistoryService');
+const { resetFundamentalsCache } = require('../dist/services/marketFundamentalsService');
 
 test('parseWatchlistCsv correctly extracts symbols from Yahoo Finance CSV export and plain tickers', () => {
   const sampleCsv = `Symbol,Current Price,Date,Time,Change,Open,High,Low,Volume
@@ -66,12 +67,25 @@ test('marketQuoteService caches results in memory', async () => {
 test('forceRefresh bypasses memory cache for quotes and history', async () => {
   resetQuoteCache();
   resetHistoryCache();
+  resetFundamentalsCache();
 
   const originalAxiosGet = axios.get;
   let quoteCallCount = 0;
   let historyCallCount = 0;
+  let fundamentalsCallCount = 0;
 
   axios.get = async (url) => {
+    if (url.includes('/fundamentals-timeseries/')) {
+      fundamentalsCallCount += 1;
+      return {
+        data: {
+          timeseries: {
+            result: [{ trailingPeRatio: [{ asOfDate: '2025-01-01', reportedValue: { raw: 25.5 } }] }],
+            error: null,
+          },
+        },
+      };
+    }
     if (url.includes('range=1d&interval=1d') || url.includes('interval=1d&range=1d')) {
       quoteCallCount += 1;
       const price = quoteCallCount === 1 ? 150 : 152.5;
@@ -128,16 +142,21 @@ test('forceRefresh bypasses memory cache for quotes and history', async () => {
     const q1 = await getQuoteForSymbol('TEST');
     assert.equal(q1.price, 150);
     assert.equal(q1.source, 'yahoo');
+    assert.equal(q1.peRatio, 25.5);
+    assert.equal(q1.peRatioAsOf, '2025-01-01');
 
     const qCached = await getQuoteForSymbol('TEST');
     assert.equal(qCached.source, 'cached');
     assert.equal(qCached.price, 150);
+    assert.equal(qCached.peRatio, 25.5);
     assert.equal(quoteCallCount, 1);
 
     const qForced = await getQuoteForSymbol('TEST', true);
     assert.equal(qForced.source, 'yahoo');
     assert.equal(qForced.price, 152.5);
     assert.equal(quoteCallCount, 2);
+    assert.equal(qForced.peRatio, 25.5);
+    assert.equal(fundamentalsCallCount, 1);
 
     const h1 = await fetchWatchlistCandles('TEST', '1d', '5m');
     assert.equal(h1.candles[1].close, 150);
@@ -154,6 +173,7 @@ test('forceRefresh bypasses memory cache for quotes and history', async () => {
     axios.get = originalAxiosGet;
     resetQuoteCache();
     resetHistoryCache();
+    resetFundamentalsCache();
   }
 });
 

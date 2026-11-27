@@ -277,6 +277,9 @@ export interface WatchlistSymbolMeta {
 export interface MarketQuote {
   symbol: string;
   name?: string;
+  /** Latest reported trailing-twelve-month P/E; null when unavailable or non-positive. */
+  peRatio?: number | null;
+  peRatioAsOf?: string; // YYYY-MM-DD
   price: number;
   change: number;
   changePercent: number;
