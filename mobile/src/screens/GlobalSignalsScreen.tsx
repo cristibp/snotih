@@ -24,11 +24,14 @@ export default function GlobalSignalsScreen({ isActive = true }: GlobalSignalsSc
     isLoading,
     isRefreshing,
     isSendingDiscord,
+    isCheckingOnly,
     discordStatus,
     error,
     refresh,
     sendDiscordReport,
+    checkSignalsOnly,
   } = useGlobalSignals(isActive);
+  const isActionBusy = isSendingDiscord || isCheckingOnly;
 
   const getImpactBadge = (impact: SignalImpact) => {
     switch (impact) {
@@ -220,20 +223,44 @@ export default function GlobalSignalsScreen({ isActive = true }: GlobalSignalsSc
         </View>
       )}
 
-      {/* Discord Trigger Button */}
+      {/* Discord & Check-Only Trigger Buttons */}
       <View style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: isBlack ? 1 : 0 }]}>
-        <TouchableOpacity
-          style={[styles.discordButton, isSendingDiscord && styles.buttonDisabled]}
-          onPress={() => sendDiscordReport()}
-          disabled={isSendingDiscord}
-          activeOpacity={0.8}
-        >
-          {isSendingDiscord ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.discordButtonText}>🚀 Trimite Sumar pe Discord (#trading)</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.discordButton, isActionBusy && styles.buttonDisabled]}
+            onPress={() => sendDiscordReport()}
+            disabled={isActionBusy}
+            activeOpacity={0.8}
+          >
+            {isSendingDiscord ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.discordButtonText}>🚀 Trimite Sumar pe Discord (#trading)</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryActionButton,
+              {
+                backgroundColor: colors.tierBullishBg,
+                borderColor: isBlack ? 'rgba(59, 130, 246, 0.45)' : '#93C5FD',
+              },
+              isActionBusy && styles.buttonDisabled,
+            ]}
+            onPress={() => checkSignalsOnly()}
+            disabled={isActionBusy}
+            activeOpacity={0.8}
+          >
+            {isCheckingOnly ? (
+              <ActivityIndicator size="small" color={colors.tierBullishText} />
+            ) : (
+              <Text style={[styles.secondaryActionButtonText, { color: colors.tierBullishText }]}>
+                🔍 Verifică Semnale (fără trimitere)
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {discordStatus && (
           <View style={[styles.statusBanner, { backgroundColor: colors.segmentBackground }]}>
@@ -451,6 +478,9 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
   },
+  actionButtonsContainer: {
+    gap: 10,
+  },
   discordButton: {
     backgroundColor: '#5865F2', // Culoare Discord
     paddingVertical: 12,
@@ -460,6 +490,17 @@ const styles = StyleSheet.create({
   },
   discordButtonText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryActionButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionButtonText: {
     fontSize: 14,
     fontWeight: '700',
   },

@@ -7,6 +7,7 @@ export function useGlobalSignals(isActive: boolean = true) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isSendingDiscord, setIsSendingDiscord] = useState<boolean>(false);
+  const [isCheckingOnly, setIsCheckingOnly] = useState<boolean>(false);
   const [discordStatus, setDiscordStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,14 +51,37 @@ export function useGlobalSignals(isActive: boolean = true) {
     }
   }, []);
 
+  const checkSignalsOnly = useCallback(async () => {
+    setIsCheckingOnly(true);
+    setDiscordStatus(null);
+    setError(null);
+    try {
+      const result = await fetchGlobalSignals();
+      setData(result);
+      const score = result.globalSentiment.score;
+      const formattedScore = `${score >= 0 ? '+' : ''}${score.toFixed(3)}`;
+      setDiscordStatus(
+        `Verificare fără trimitere pe canal: ${result.globalSentiment.icon} ${result.globalSentiment.label} (scor ${formattedScore}, ${result.evaluationTime}).`
+      );
+      return true;
+    } catch (err: any) {
+      setDiscordStatus(`Eroare la verificare: ${err?.message || 'Verificarea a eșuat'}`);
+      return false;
+    } finally {
+      setIsCheckingOnly(false);
+    }
+  }, []);
+
   return {
     data,
     isLoading,
     isRefreshing,
     isSendingDiscord,
+    isCheckingOnly,
     discordStatus,
     error,
     refresh,
     sendDiscordReport,
+    checkSignalsOnly,
   };
 }

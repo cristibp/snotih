@@ -37,7 +37,8 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
   const [vixResult, setVixResult] = useState<VixAlertResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [isChecking, setIsChecking] = useState<boolean>(false);
+  const [checkingMode, setCheckingMode] = useState<'send' | 'checkOnly' | null>(null);
+  const isCheckingAny = checkingMode !== null;
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [lastCheckResponse, setLastCheckResponse] = useState<AlertCheckResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -264,18 +265,60 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
   };
 
   const handleRunRsiCheck = async () => {
-    setIsChecking(true);
+    setCheckingMode('send');
     setErrorMessage(null);
     try {
       const checkRes = await triggerAlertsCheck();
       setLastCheckResponse(checkRes);
       setRsiResults(checkRes.results);
       if (checkRes.vix) setVixResult(checkRes.vix);
+      setLastPolledAt(new Date());
+      lastFetchedTimestampRef.current = Date.now();
+      setCountdown(RSI_POLLING_SECONDS);
     } catch (err: any) {
       console.error('Eroare la verificarea alertelor:', err);
       setErrorMessage(err?.message || 'Verificarea alertelor a eșuat.');
     } finally {
-      setIsChecking(false);
+      setCheckingMode(null);
+    }
+  };
+
+  const handleCheckAlertsOnly = async () => {
+    setCheckingMode('checkOnly');
+    setErrorMessage(null);
+    try {
+      const statusData = await fetchAlertsStatus();
+      const triggeredRsi = statusData.results.filter((r) => r.triggered);
+      const vixTriggered = Boolean(statusData.vix && statusData.vix.thresholdSurpassed);
+      const totalTriggered = triggeredRsi.length + (vixTriggered ? 1 : 0);
+
+      setConfig(statusData.config);
+      setRsiResults(statusData.results);
+      if (statusData.vix) {
+        setVixResult(statusData.vix);
+      }
+      setLastPolledAt(new Date());
+      lastFetchedTimestampRef.current = Date.now();
+      setCountdown(RSI_POLLING_SECONDS);
+
+      setLastCheckResponse({
+        timestamp: statusData.timestamp,
+        totalChecked: statusData.results.length + (statusData.vix ? 1 : 0),
+        totalTriggered,
+        results: statusData.results,
+        vix: statusData.vix,
+        discordNotified: false,
+        discordChannel: '#trading',
+        discordDetails:
+          totalTriggered > 0
+            ? `Verificare fără trimitere pe canal: ${totalTriggered} alerte detectate (${triggeredRsi.length} RSI, ${vixTriggered ? '1 VIX' : '0 VIX'}).`
+            : 'Verificare fără trimitere pe canal: nicio alertă declanșată.',
+      });
+    } catch (err: any) {
+      console.error('Eroare la verificarea alertelor (fără trimitere):', err);
+      setErrorMessage(err?.message || 'Verificarea alertelor a eșuat.');
+    } finally {
+      setCheckingMode(null);
     }
   };
 
@@ -341,7 +384,7 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
         </View>
       </View>
 
-      {/* Buton Verificare Manuala & Discord Trigger */}
+      {/* Butoane Verificare Manuala & Discord Trigger */}
       <View
         style={[
           styles.actionCard,
@@ -352,18 +395,42 @@ export default function TradingScreen({ isActive = true }: TradingScreenProps) {
           },
         ]}
       >
-        <TouchableOpacity
-          style={[styles.primaryButton, isChecking && styles.buttonDisabled]}
-          onPress={handleRunRsiCheck}
-          disabled={isChecking}
-          activeOpacity={0.8}
-        >
-          {isChecking ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.primaryButtonText}>🚀 Verifică Alerte & Trimite (#trading)</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.primaryButton, isCheckingAny && styles.buttonDisabled]}
+            onPress={handleRunRsiCheck}
+            disabled={isCheckingAny}
+            activeOpacity={0.8}
+          >
+            {checkingMode === 'send' ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>🚀 Verifică Alerte & Trimite (#trading)</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryActionButton,
+              {
+                backgroundColor: colors.tierBullishBg,
+                borderColor: isBlack ? 'rgba(59, 130, 246, 0.45)' : '#93C5FD',
+              },
+              isCheckingAny && styles.buttonDisabled,
+            ]}
+            onPress={handleCheckAlertsOnly}
+            disabled={isCheckingAny}
+            activeOpacity={0.8}
+          >
+            {checkingMode === 'checkOnly' ? (
+              <ActivityIndicator size="small" color={colors.tierBullishText} />
+            ) : (
+              <Text style={[styles.secondaryActionButtonText, { color: colors.tierBullishText }]}>
+                🔍 Verifică Alerte (fără trimitere)
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {lastCheckResponse && (
           <View
@@ -847,6 +914,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  actionButtonsContainer: {
+    gap: 10,
+  },
   primaryButton: {
     backgroundColor: '#2563EB',
     paddingVertical: 14,
@@ -857,6 +927,17 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryActionButton: {
+    paddingVertical: 13,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionButtonText: {
+    fontSize: 14,
     fontWeight: '700',
   },
   buttonDisabled: {

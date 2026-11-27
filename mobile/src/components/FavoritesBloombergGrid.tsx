@@ -24,6 +24,11 @@ import Svg, {
 } from 'react-native-svg';
 import { fetchWatchlistHistory } from '../api/client';
 import { CandlePoint, FavoriteList, MarketQuote } from '../api/types';
+import {
+  BloombergSortMode,
+  NEXT_BLOOMBERG_SORT_MODE,
+  sortBloombergFavorites,
+} from '../services/bloombergSort';
 import { useTheme } from '../theme/ThemeContext';
 
 const PINNED_STORAGE_KEY = '@watchlist_bloomberg_pinned';
@@ -116,6 +121,28 @@ function formatHoverTimestamp(timestamp: number, tf: string): string {
   return `${d.getDate()} ${MONTHS_RO[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
 }
 
+const SORT_MODE_META: Record<
+  BloombergSortMode,
+  { label: string; accessibilityLabel: string; accentColor?: string; tintBg?: string }
+> = {
+  neutral: {
+    label: '⇅ Implicit',
+    accessibilityLabel: 'Sortare implicită (fixate primele). Apasă pentru Top Gainers.',
+  },
+  gainers: {
+    label: '▲ Gainers',
+    accessibilityLabel: 'Sortare Top Gainers. Apasă pentru Top Losers.',
+    accentColor: '#10B981',
+    tintBg: 'rgba(16, 185, 129, 0.18)',
+  },
+  losers: {
+    label: '▼ Losers',
+    accessibilityLabel: 'Sortare Top Losers. Apasă pentru sortare implicită.',
+    accentColor: '#EF4444',
+    tintBg: 'rgba(239, 68, 68, 0.18)',
+  },
+};
+
 export default function FavoritesBloombergGrid({
   favorites,
   quotes,
@@ -141,6 +168,7 @@ export default function FavoritesBloombergGrid({
   const [globalLoading, setGlobalLoading] = useState<boolean>(true);
   const [hoverData, setHoverData] = useState<Record<string, HoverPointState | null>>({});
   const [pinnedByList, setPinnedByList] = useState<Record<string, string[]>>(readInitialPinnedMap);
+  const [sortMode, setSortMode] = useState<BloombergSortMode>('neutral');
   const [refreshingSymbols, setRefreshingSymbols] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -169,7 +197,7 @@ export default function FavoritesBloombergGrid({
           setPinnedByList(parsed as Record<string, string[]>);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       isMountedRef.current = false;
     };
@@ -181,14 +209,14 @@ export default function FavoritesBloombergGrid({
   );
   const pinnedSet = useMemo(() => new Set(pinnedSymbols), [pinnedSymbols]);
 
-  const orderedFavorites = useMemo(() => {
-    if (pinnedSymbols.length === 0) return favorites;
-    const favSet = new Set(favorites);
-    const pinnedFirst = pinnedSymbols.filter((sym) => favSet.has(sym));
-    const pinnedFirstSet = new Set(pinnedFirst);
-    const rest = favorites.filter((sym) => !pinnedFirstSet.has(sym));
-    return [...pinnedFirst, ...rest];
-  }, [favorites, pinnedSymbols]);
+  const orderedFavorites = useMemo(
+    () => sortBloombergFavorites(favorites, pinnedSymbols, quotes, sortMode),
+    [favorites, pinnedSymbols, quotes, sortMode]
+  );
+
+  const cycleSortMode = useCallback(() => {
+    setSortMode((prev) => NEXT_BLOOMBERG_SORT_MODE[prev]);
+  }, []);
 
   const trimmedSearch = searchQuery.trim().toUpperCase();
 
@@ -269,7 +297,7 @@ export default function FavoritesBloombergGrid({
       try {
         const [histRes] = await Promise.all([
           fetchWatchlistHistory(symbol, activeTfConfig.range, activeTfConfig.interval, true).catch(() => null),
-          Promise.resolve(onRefreshSymbol?.(symbol)).catch(() => {}),
+          Promise.resolve(onRefreshSymbol?.(symbol)).catch(() => { }),
         ]);
         if (histRes && isMountedRef.current && activeTfKeyRef.current === requestTfKey) {
           setHistories((prev) => ({
@@ -368,10 +396,10 @@ export default function FavoritesBloombergGrid({
     gridWidth > 1050 && displayedFavorites.length >= 4
       ? 4
       : gridWidth > 680 && displayedFavorites.length >= 3
-      ? 3
-      : gridWidth >= 460 && displayedFavorites.length >= 2
-      ? 2
-      : 1;
+        ? 3
+        : gridWidth >= 460 && displayedFavorites.length >= 2
+          ? 2
+          : 1;
   const cardGap = isKiosk ? 10 : 8;
   const paddingLeft = 8;
   const paddingRight = isKiosk ? 28 : 8;
@@ -520,8 +548,8 @@ export default function FavoritesBloombergGrid({
     const formattedTime = hover
       ? hoverTimeStr
       : quote?.timestamp
-      ? new Date(quote.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : '';
+        ? new Date(quote.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '';
 
     const isPinned = pinnedSet.has(symbol);
     const isSymbolRefreshing = Boolean(refreshingSymbols[symbol]);
@@ -588,8 +616,8 @@ export default function FavoritesBloombergGrid({
                   backgroundColor: isPinned
                     ? 'rgba(59, 130, 246, 0.22)'
                     : isBlack
-                    ? '#334155'
-                    : '#E2E8F0',
+                      ? '#334155'
+                      : '#E2E8F0',
                   borderColor: isPinned ? '#3B82F6' : 'transparent',
                   borderWidth: isPinned ? 1 : 0,
                 },
@@ -839,8 +867,8 @@ export default function FavoritesBloombergGrid({
             {dayLow > 0 && dayHigh > 0
               ? `Zi: ${dayLow.toFixed(1)} - ${dayHigh.toFixed(1)}`
               : quote?.previousClose
-              ? `Ref: ${quote.previousClose.toFixed(1)}`
-              : ''}
+                ? `Ref: ${quote.previousClose.toFixed(1)}`
+                : ''}
           </Text>
 
           <TouchableOpacity
@@ -940,6 +968,35 @@ export default function FavoritesBloombergGrid({
             })}
           </View>
 
+          {/* 3-State Sort Button: Neutral (Pinned first) -> Top Gainers -> Top Losers */}
+          {(() => {
+            const meta = SORT_MODE_META[sortMode];
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.sortToggleBtn,
+                  {
+                    backgroundColor: meta.tintBg ?? (isBlack ? '#1E293B' : '#E2E8F0'),
+                    borderColor: meta.accentColor ?? colors.cardBorder,
+                  },
+                ]}
+                onPress={cycleSortMode}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={meta.accessibilityLabel}
+              >
+                <Text
+                  style={[
+                    styles.sortToggleText,
+                    { color: meta.accentColor ?? colors.text },
+                  ]}
+                >
+                  {meta.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
+
           {/* Search toggle & Add Symbol shortcuts */}
           {!isKiosk && (
             <TouchableOpacity
@@ -948,9 +1005,9 @@ export default function FavoritesBloombergGrid({
                 (isSearchOpen || searchQuery.trim().length > 0)
                   ? { backgroundColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#3B82F6' }
                   : {
-                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
-                      borderColor: colors.cardBorder,
-                    },
+                    backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                    borderColor: colors.cardBorder,
+                  },
               ]}
               onPress={() => {
                 if (isSearchOpen && searchQuery) {
@@ -992,9 +1049,9 @@ export default function FavoritesBloombergGrid({
                 isKiosk
                   ? { backgroundColor: '#EF4444', borderColor: '#EF4444' }
                   : {
-                      backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
-                      borderColor: colors.cardBorder,
-                    },
+                    backgroundColor: isBlack ? '#1E293B' : '#E2E8F0',
+                    borderColor: colors.cardBorder,
+                  },
               ]}
               onPress={() => onToggleKiosk(!isKiosk)}
               activeOpacity={0.7}
@@ -1262,7 +1319,20 @@ const styles = StyleSheet.create({
   headerRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
+  },
+  sortToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sortToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   tfSelector: {
     flexDirection: 'row',
