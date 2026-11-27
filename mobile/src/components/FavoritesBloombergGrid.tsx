@@ -1172,6 +1172,7 @@ export default function FavoritesBloombergGrid({
               onChangeText={setSearchQuery}
               placeholder="Caută simbol existent în watchlist-uri..."
               placeholderTextColor={colors.textMuted}
+              autoFocus
               autoCapitalize="characters"
             />
             {searchQuery.length > 0 && (
