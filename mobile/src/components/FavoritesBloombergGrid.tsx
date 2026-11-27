@@ -32,6 +32,45 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 
 const PINNED_STORAGE_KEY = '@watchlist_bloomberg_pinned';
+const TIMEFRAME_STORAGE_KEY = '@watchlist_bloomberg_timeframe';
+
+const TIMEFRAMES = [
+  { label: '1D', range: '1d', interval: '5m' },
+  { label: '5D', range: '5d', interval: '15m' },
+  { label: '1M', range: '1mo', interval: '1d' },
+  { label: '1Y', range: '1y', interval: '1d' },
+];
+
+function isValidTimeframe(value: unknown): value is string {
+  return typeof value === 'string' && TIMEFRAMES.some((tf) => tf.label === value);
+}
+
+function readInitialTimeframe(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(TIMEFRAME_STORAGE_KEY);
+      if (isValidTimeframe(raw)) {
+        return raw;
+      }
+    }
+  } catch {
+    // Ignore storage read error
+  }
+  return '1D';
+}
+
+function persistTimeframe(tf: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(TIMEFRAME_STORAGE_KEY, tf);
+    }
+  } catch {
+    // Ignore web storage write error
+  }
+  AsyncStorage.setItem(TIMEFRAME_STORAGE_KEY, tf).catch((err) => {
+    console.warn('Failed to save Bloomberg timeframe to AsyncStorage:', err);
+  });
+}
 
 function readInitialPinnedMap(): Record<string, string[]> {
   try {
@@ -82,13 +121,6 @@ interface FavoritesBloombergGridProps {
   isRefreshing?: boolean;
   onManualRefresh?: () => void;
 }
-
-const TIMEFRAMES = [
-  { label: '1D', range: '1d', interval: '5m' },
-  { label: '5D', range: '5d', interval: '15m' },
-  { label: '1M', range: '1mo', interval: '1d' },
-  { label: '1Y', range: '1y', interval: '1d' },
-];
 
 interface MiniChartData {
   symbol: string;
@@ -162,7 +194,7 @@ export default function FavoritesBloombergGrid({
   onManualRefresh,
 }: FavoritesBloombergGridProps) {
   const { colors, isBlack } = useTheme();
-  const [selectedTf, setSelectedTf] = useState<string>('1D');
+  const [selectedTf, setSelectedTf] = useState<string>(readInitialTimeframe);
   const [gridWidth, setGridWidth] = useState<number>(540);
   const [histories, setHistories] = useState<Record<string, MiniChartData>>({});
   const [globalLoading, setGlobalLoading] = useState<boolean>(true);
@@ -176,6 +208,7 @@ export default function FavoritesBloombergGrid({
   const [isRemoving, setIsRemoving] = useState<boolean>(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const hasUserToggledPinRef = useRef(false);
+  const hasUserSelectedTfRef = useRef(false);
   const isMountedRef = useRef(true);
   const chartWrapperRefs = useRef<Record<string, View | null>>({});
 
@@ -198,9 +231,24 @@ export default function FavoritesBloombergGrid({
         }
       })
       .catch(() => { });
+    AsyncStorage.getItem(TIMEFRAME_STORAGE_KEY)
+      .then((raw) => {
+        if (!isMountedRef.current || hasUserSelectedTfRef.current || !raw) return;
+        if (isValidTimeframe(raw)) {
+          setSelectedTf(raw);
+        }
+      })
+      .catch(() => { });
     return () => {
       isMountedRef.current = false;
     };
+  }, []);
+
+  const handleSelectTimeframe = useCallback((tfLabel: string) => {
+    if (!isValidTimeframe(tfLabel)) return;
+    hasUserSelectedTfRef.current = true;
+    setSelectedTf(tfLabel);
+    persistTimeframe(tfLabel);
   }, []);
 
   const pinnedSymbols = useMemo(
@@ -949,7 +997,7 @@ export default function FavoritesBloombergGrid({
                       { backgroundColor: isBlack ? '#334155' : '#FFFFFF' },
                     ],
                   ]}
-                  onPress={() => setSelectedTf(tf.label)}
+                  onPress={() => handleSelectTimeframe(tf.label)}
                   activeOpacity={0.8}
                 >
                   <Text
